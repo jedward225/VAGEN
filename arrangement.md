@@ -28,7 +28,7 @@ vagen/env/spoc/
 ## 2. 详细实施步骤
 
 ### 2.1 目录复制与基础替换
-- [ ] **拷贝** `vagen/env/navigation` → `vagen/env/spoc`
+- [x] **拷贝** `vagen/env/navigation` → `vagen/env/spoc`
 - [ ] 全局替换模块引用：`navigation` → `spoc`
 - [ ] 验证 `import SpocEnv` 不报错
 
