@@ -18,28 +18,55 @@ class SpocEnv(BaseEnv):
         'base', 'common_sense', 'complex_instruction', 'visual_appearance', 'long_horizon'
     ]
 
-    # Available actions
+    # Available actions - 20 actions for Stretch robot
     ACTION_LOOKUP = {
-        "moveahead": 1,
-        "moveback": 2,
-        "moveright": 3,
-        "moveleft": 4,
-        "rotateright": 5,
-        "rotateleft": 6,
-        "lookup": 7,
-        "lookdown": 8
+        # Navigation actions (8)
+        "moveahead": 1,      # move_ahead
+        "moveback": 2,       # move_back  
+        "rotateright": 3,    # rotate_right
+        "rotateleft": 4,     # rotate_left
+        "rotateright_small": 5,  # rotate_right_small
+        "rotateleft_small": 6,   # rotate_left_small
+        "lookup": 7,         # deprecated for stretch
+        "lookdown": 8,       # deprecated for stretch
+        
+        # Manipulation actions (12)
+        "pickup": 9,         # pickup action
+        "dropoff": 10,       # dropoff action
+        "move_arm_up": 11,   # yp - move arm up 0.1m
+        "move_arm_down": 12, # ym - move arm down 0.1m  
+        "move_arm_out": 13,  # zp - extend arm out 0.1m
+        "move_arm_in": 14,   # zm - retract arm in 0.1m
+        "wrist_open": 15,    # wp - rotate wrist counterclockwise 10°
+        "wrist_close": 16,   # wm - rotate wrist clockwise 10°
+        "move_arm_up_small": 17,   # yps - move arm up 0.02m
+        "move_arm_down_small": 18, # yms - move arm down 0.02m
+        "move_arm_out_small": 19,  # zps - extend arm out 0.02m
+        "move_arm_in_small": 20,   # zms - retract arm in 0.02m
     }
 
-    # Action descriptions
+    # Action descriptions for Stretch robot
     DISCRETE_SKILLSET = [
-        "Move forward by 0.5 meter",
-        "Move backward by 0.5 meter",
-        "Move rightward by 0.5 meter",
-        "Move leftward by 0.5 meter",
-        "Rotate to the right by 90 degrees.",
-        "Rotate to the left by 90 degrees.",
-        "Tilt the camera upward by 30 degrees.",
-        "Tilt the camera downward by 30 degrees.",
+        "Move the agent's base forward by 0.2 meters",          # moveahead
+        "Move the agent's base backward by 0.2 meters",         # moveback  
+        "Rotate the agent's base right by 30°",                 # rotateright
+        "Rotate the agent's base left by 30°",                  # rotateleft
+        "Rotate the agent's base right by 6°",                  # rotateright_small
+        "Rotate the agent's base left by 6°",                   # rotateleft_small
+        "Deprecated - tilt camera upward (not used for Stretch)", # lookup
+        "Deprecated - tilt camera downward (not used for Stretch)", # lookdown
+        "Initiate a grasp action to pick up an object",         # pickup
+        "Execute a release action to drop an object",           # dropoff
+        "Move the arm up by 0.1 meters",                       # move_arm_up
+        "Move the arm down by 0.1 meters",                     # move_arm_down
+        "Extend the arm outward by 0.1 meters",                # move_arm_out
+        "Retract the arm inward by 0.1 meters",                # move_arm_in
+        "Rotate the wrist counterclockwise by 10°",            # wrist_open
+        "Rotate the wrist clockwise by 10°",                   # wrist_close
+        "Move the arm up by 0.02 meters",                      # move_arm_up_small
+        "Move the arm down by 0.02 meters",                    # move_arm_down_small
+        "Extend the arm outward by 0.02 meters",               # move_arm_out_small
+        "Retract the arm inward by 0.02 meters",               # move_arm_in_small
     ]
 
     def __init__(self, config: SpocEnvConfig):
@@ -274,30 +301,72 @@ class SpocEnv(BaseEnv):
         return self._render(init_obs=False), self.reward, done, info
     
     def _execute_action(self, action_index):
-        """Execute the discrete action in the environment.
+        """Execute the discrete action in the environment using Stretch robot APIs.
         
         Args:
-            action_index: Index of the action to execute
+            action_index: Index of the action to execute (1-20)
         """
-        if action_index == 1:  # Move forward by 0.25 meter
-            self._last_event = self.env.step(action="MoveAhead", moveMagnitude=self.step_length)
-        elif action_index == 2:  # Move backward by 0.25 meter
-            self._last_event = self.env.step(action="MoveBack", moveMagnitude=self.step_length)
-        elif action_index == 3:  # Move right by 0.25 meter
-            self._last_event = self.env.step(action="MoveRight", moveMagnitude=self.step_length)
-        elif action_index == 4:  # Move left by 0.25 meter
-            self._last_event = self.env.step(action="MoveLeft", moveMagnitude=self.step_length)
-        elif action_index == 5:  # Rotate clockwise by 90 degrees
-            self._last_event = self.env.step(action="RotateRight", degrees=90)
-        elif action_index == 6:  # Rotate counterclockwise by 90 degrees
-            self._last_event = self.env.step(action="RotateLeft", degrees=90)
-        elif action_index == 7:  # Tilt the camera upward by 30 degrees
-            self._last_event = self.env.step(action="LookUp", degrees=30)
-        elif action_index == 8:  # Tilt the camera downward by 30 degrees
-            self._last_event = self.env.step(action="LookDown", degrees=30)
+        # Get current arm position for arm movement actions
+        if action_index >= 11 and action_index <= 20:
+            # For arm actions, we need to get current position and calculate new position
+            try:
+                current_arm = self.env.last_event.metadata.get("arm", {})
+                # This is a simplified approach - real implementation would get current arm state
+                # For now, use relative movements compatible with AI2-THOR
+                pass
+            except:
+                pass
+        
+        if action_index == 1:  # moveahead - Move forward by 0.2 meter  
+            self._last_event = self.env.step(action="MoveAgent", ahead=0.2)
+        elif action_index == 2:  # moveback - Move backward by 0.2 meter
+            self._last_event = self.env.step(action="MoveAgent", ahead=-0.2)
+        elif action_index == 3:  # rotateright - Rotate right by 30 degrees
+            self._last_event = self.env.step(action="RotateAgent", degrees=30)
+        elif action_index == 4:  # rotateleft - Rotate left by 30 degrees
+            self._last_event = self.env.step(action="RotateAgent", degrees=-30)
+        elif action_index == 5:  # rotateright_small - Rotate right by 6 degrees
+            self._last_event = self.env.step(action="RotateAgent", degrees=6)
+        elif action_index == 6:  # rotateleft_small - Rotate left by 6 degrees
+            self._last_event = self.env.step(action="RotateAgent", degrees=-6)
+        elif action_index == 7:  # lookup - Deprecated for Stretch
+            self._last_event = self.env.step(action="Pass")  # No-op for Stretch
+        elif action_index == 8:  # lookdown - Deprecated for Stretch
+            self._last_event = self.env.step(action="Pass")  # No-op for Stretch
+        elif action_index == 9:  # pickup - Grasp action
+            self._last_event = self.env.step(action="PickupObject")
+        elif action_index == 10:  # dropoff - Release action
+            self._last_event = self.env.step(action="ReleaseObject")
+        elif action_index == 11:  # move_arm_up - Move arm up by 0.1m
+            self._last_event = self.env.step(action="MoveArmRelative", y=0.1)
+        elif action_index == 12:  # move_arm_down - Move arm down by 0.1m
+            self._last_event = self.env.step(action="MoveArmRelative", y=-0.1)
+        elif action_index == 13:  # move_arm_out - Extend arm out by 0.1m
+            self._last_event = self.env.step(action="MoveArmRelative", z=0.1)
+        elif action_index == 14:  # move_arm_in - Retract arm in by 0.1m
+            self._last_event = self.env.step(action="MoveArmRelative", z=-0.1)
+        elif action_index == 15:  # wrist_open - Rotate wrist counterclockwise 10°
+            self._last_event = self.env.step(action="RotateWristRelative", yaw=-10)
+        elif action_index == 16:  # wrist_close - Rotate wrist clockwise 10°
+            self._last_event = self.env.step(action="RotateWristRelative", yaw=10)
+        elif action_index == 17:  # move_arm_up_small - Move arm up by 0.02m
+            self._last_event = self.env.step(action="MoveArmRelative", y=0.02)
+        elif action_index == 18:  # move_arm_down_small - Move arm down by 0.02m
+            self._last_event = self.env.step(action="MoveArmRelative", y=-0.02)
+        elif action_index == 19:  # move_arm_out_small - Extend arm out by 0.02m
+            self._last_event = self.env.step(action="MoveArmRelative", z=0.02)
+        elif action_index == 20:  # move_arm_in_small - Retract arm in by 0.02m
+            self._last_event = self.env.step(action="MoveArmRelative", z=-0.02)
+        else:
+            # Invalid action, do nothing
+            self._last_event = self.env.step(action="Pass")
     
     def measure_success(self):
-        """Check if the agent has reached the target.
+        """Check if the agent has successfully completed the Fetch task.
+        
+        For Fetch tasks, success means:
+        1. The target object is being held by the agent
+        2. OR the agent is very close to the target position
         
         Returns:
             success: Boolean indicating success
@@ -305,11 +374,45 @@ class SpocEnv(BaseEnv):
         """
         agent_position = self.env.last_event.metadata["agent"]["position"]
         target_position = self.episode_data["target_position"]
+        
+        # Calculate distance to target
         dist = math.sqrt(
             (agent_position["x"] - target_position["x"])**2 +
             (agent_position["z"] - target_position["z"])**2
         )
-        success = (dist <= self.success_threshold)
+        
+        # Check if agent is holding the target object
+        held_objects = []
+        try:
+            # For Stretch robot, check if any object is being held
+            arm_metadata = self.env.last_event.metadata.get("arm", {})
+            held_objects = arm_metadata.get("heldObjects", [])
+        except:
+            # Fallback: check general agent metadata
+            try:
+                agent_metadata = self.env.last_event.metadata.get("agent", {})
+                held_objects = agent_metadata.get("heldObjects", [])
+            except:
+                held_objects = []
+        
+        # Check if target object is being held
+        target_object_id = self.episode_data.get("targetObjectId", "")
+        target_object_type = self.episode_data.get("targetObjectType", "")
+        
+        object_held = False
+        if held_objects:
+            # Check if any held object matches target
+            for held_obj in held_objects:
+                if (target_object_id and held_obj == target_object_id) or \
+                   (target_object_type and target_object_type.lower() in held_obj.lower()):
+                    object_held = True
+                    break
+        
+        # Success conditions:
+        # 1. Object is held by the agent, OR
+        # 2. Agent is very close to target (within success_threshold)
+        success = object_held or (dist <= self.success_threshold)
+        
         return float(success), dist
     
     def _render(self, init_obs=True):
