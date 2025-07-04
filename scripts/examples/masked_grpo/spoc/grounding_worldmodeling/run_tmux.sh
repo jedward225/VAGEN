@@ -86,7 +86,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
     data.train_batch_size=2 \\
     data.max_prompt_length=1024 \\
-    data.max_response_length=300 \\
+    data.max_response_length=200 \\
     data.max_trajectory_length=1024 \\
     data.image_key=images \\
     data.truncation=left \\
@@ -104,7 +104,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.35 \\
     actor_rollout_ref.rollout.max_num_seqs=16 \\
     actor_rollout_ref.rollout.max_num_batched_tokens=1024 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
