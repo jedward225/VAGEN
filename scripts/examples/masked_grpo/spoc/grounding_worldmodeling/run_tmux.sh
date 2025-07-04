@@ -84,16 +84,16 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     algorithm.high_level_gamma=1.0 \\
     data.train_files=data/$EXPERIMENT_NAME/train.parquet \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
-    data.train_batch_size=2 \\
+    data.train_batch_size=1 \\
     data.max_prompt_length=1024 \\
     data.max_response_length=200 \\
-    data.max_trajectory_length=1024 \\
+    data.max_trajectory_length=512 \\
     data.image_key=images \\
     data.truncation=left \\
     actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     actor_rollout_ref.actor.optim.lr=1e-6 \\
     actor_rollout_ref.model.use_remove_padding=True \\
-    actor_rollout_ref.actor.ppo_mini_batch_size=2 \\
+    actor_rollout_ref.actor.ppo_mini_batch_size=1 \\
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.actor.use_kl_loss=False \\
     actor_rollout_ref.actor.kl_loss_coef=0.001 \\
@@ -104,9 +104,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.35 \\
-    actor_rollout_ref.rollout.max_num_seqs=16 \\
-    actor_rollout_ref.rollout.max_num_batched_tokens=1024 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.25 \\
+    actor_rollout_ref.rollout.max_num_seqs=8 \\
+    actor_rollout_ref.rollout.max_num_batched_tokens=512 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
     actor_rollout_ref.rollout.free_cache_engine=True \\
@@ -120,7 +120,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     critic.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     critic.model.enable_gradient_checkpointing=True \\
     critic.ppo_micro_batch_size_per_gpu=1 \\
-    critic.ppo_mini_batch_size=2 \\
+    critic.ppo_mini_batch_size=1 \\
     critic.model.fsdp_config.param_offload=True \\
     critic.model.fsdp_config.optimizer_offload=True \\
     algorithm.kl_ctrl.kl_coef=0.001 \\
@@ -141,7 +141,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.n_gpus_per_node=1 \\
     trainer.val_before_train=True \\
     trainer.val_generations_to_log_to_wandb=8 \\
-    rollout_manager.n_trajectory=2 \\
+    rollout_manager.n_trajectory=1 \\
     rollout_manager.use_service=True \\
     rollout_manager.timeout=600 \\
     rollout_manager.base_url=\"http://localhost:$PORT\" \\
@@ -151,6 +151,7 @@ echo "-----------------------------------------"
 echo "SPOC GRPO Training Configuration Summary:"
 echo "Port: $PORT"
 echo "CUDA Devices: $CUDA_DEVICES"
+#
 echo "Server Session: $SERVER_SESSION"
 echo "Training Session: $TRAIN_SESSION"
 echo "Environment: SPOC (Stretch robot manipulation)"
@@ -162,17 +163,19 @@ echo "To attach to training session: tmux attach-session -t $TRAIN_SESSION"
 echo "NOTE: The sessions will remain active. To detach from a session use Ctrl+B followed by D"
 echo ""
 echo "SPOC-specific adjustments made:"
+echo "- Model: Qwen2.5-VL-3B-Instruct (latest 3B multimodal model)"
 echo "- Single GPU configuration (n_gpus_per_node=1)"
 echo "- Tensor model parallel size: 1 (single GPU)"
-echo "- GPU memory utilization: 0.5 (aggressive memory optimization)"
-echo "- Batch size: 2 (minimum for training)"
-echo "- PPO mini batch size: 2 (reduced for memory)"
-echo "- Trajectory count: 2 (minimal for memory)"
-echo "- Max num seqs: 16, Max batched tokens: 1024"
+echo "- GPU memory utilization: 0.25 (ultra-conservative)"
+echo "- Batch size: 1 (absolute minimum)"
+echo "- PPO mini batch size: 1 (absolute minimum)"
+echo "- Trajectory count: 1 (absolute minimum)"
+echo "- Max trajectory length: 512 (reduced from 1024)"
+echo "- Max response length: 200 (reduced from 300)"
+echo "- Max num seqs: 8, Max batched tokens: 512 (ultra-conservative)"
 echo "- Enforce eager mode: True (no CUDA graphs)"
 echo "- Free cache engine: True (release memory)"
 echo "- FSDP parameter/optimizer offloading enabled for memory efficiency"
 echo "- Ray resource management optimized for container environment"
 echo "- PyTorch CUDA allocator optimized (max_split_size_mb=128)"
-echo "- Set max_trajectory_length to 1024 (optimized for memory constraints)"
 echo "- Increased timeout to 600s for Stretch robot interactions" 
