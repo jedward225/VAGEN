@@ -415,6 +415,36 @@ class SpocEnv(BaseEnv):
         
         return float(success), dist
     
+    def _get_arm_state(self):
+        """Get the current arm state for proprioception.
+        
+        Returns:
+            str: Formatted arm state string
+        """
+        # Get arm position from agent metadata
+        agent_metadata = self.env.last_event.metadata.get("agent", {}) if self.env.last_event.metadata else {}
+        
+        # Extract arm information (using mock data for now since AI2-THOR Stretch integration is in progress)
+        # In a real implementation, this would come from agent_metadata["arm"] or similar
+        z_pos = getattr(self, '_arm_z', 0.0)  # Extension (default retracted)
+        y_pos = getattr(self, '_arm_y', 0.8)  # Height (default position)
+        wrist_angle = getattr(self, '_wrist_angle', 0)  # Wrist rotation
+        
+        # Determine gripper state
+        if hasattr(self, 'is_holding') and self.is_holding:
+            # Try to get the held object name from metadata
+            objects = self.env.last_event.metadata.get("objects", []) if self.env.last_event.metadata else []
+            held_objects = [obj for obj in objects if obj.get("isPickedUp", False)]
+            if held_objects:
+                object_name = held_objects[0]["objectType"].lower()
+                gripper_state = f"holding_{object_name}"
+            else:
+                gripper_state = "holding_object"
+        else:
+            gripper_state = "empty"
+        
+        return f"z={z_pos:.1f}m, y={y_pos:.1f}m, wrist={wrist_angle}°, gripper={gripper_state}"
+
     def _render(self, init_obs=True):
         """Render the environment observation.
         
@@ -445,11 +475,15 @@ class SpocEnv(BaseEnv):
             img_placeholder: [convert_numpy_to_PIL(frame)]
         }
         
+        # Get current arm state
+        arm_state = self._get_arm_state()
+        
         # Format the template
         if init_obs:
             obs_str = init_observation_template(
                 observation=img_placeholder,
                 instruction=self.episode_language_instruction,
+                arm_state=arm_state
             ) + "\n" + format_prompt_text
         else:
             obs_str = action_template(
@@ -458,7 +492,8 @@ class SpocEnv(BaseEnv):
                 reward=self.reward,
                 done=self.measure_success()[0],
                 instruction=self.episode_language_instruction,
-                env_feedback=self.info["env_feedback"]
+                env_feedback=getattr(self, 'info', {}).get("env_feedback", "No feedback"),
+                arm_state=arm_state
             ) + "\n" + format_prompt_text
         
         return {

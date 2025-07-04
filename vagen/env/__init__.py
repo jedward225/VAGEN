@@ -62,4 +62,15 @@ try:
 except ImportError:
     pass
 
+try:
+    from .spoc import SpocEnv, SpocEnvConfig, SpocService, SpocServiceConfig
+    REGISTERED_ENV["spoc"] = {
+        "env_cls": SpocEnv,
+        "config_cls": SpocEnvConfig,
+        "service_cls": SpocService,
+        "service_config_cls": SpocServiceConfig
+    }
+except ImportError:
+    pass
+
 
