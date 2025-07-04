@@ -7,6 +7,23 @@ from vagen.server.serial import serialize_observation
 from .service_config import SpocServiceConfig
 from vagen.env.utils.state_reward_text_utils import service_state_reward_wrapper
 
+"""
+info = {
+    # parse_func返回的内容
+    ...,
+    "llm_raw_response": action_str,  # 你加的
+    "metrics": metrics,
+    "is_format_rewarded": ...,
+    "distance": ...,
+    "instruction": ...,
+    "env_step": ...,
+    "episode_elapsed_seconds": ...,
+    "task_success": ...,
+    "last_action_success": ...,
+    "env_feedback": ...,
+}
+"""
+
 class SpocService(BaseService):
     """
     Service class for SPOC environments with Stretch robot manipulation tasks.
@@ -40,15 +57,18 @@ class SpocService(BaseService):
         """
         # Define worker function
         def create_single_env(env_id, config):
-            # Verify environment type
-            env_name = config.get('env_name', 'navigation')
-            if env_name != 'navigation':
-                return env_id, None, f"Expected environment type 'navigation', got '{env_name}'"
-            
-            env_config_dict = config['env_config']
-            env_config = SpocEnvConfig(**env_config_dict)
-            env = SpocEnv(env_config)
-            return env_id, (env, env_config), None
+            try:
+                # Verify environment type
+                env_name = config.get('env_name', 'navigation')
+                if env_name != 'navigation':
+                    return env_id, None, f"Expected environment type 'navigation', got '{env_name}'"
+                
+                env_config_dict = config['env_config']
+                env_config = SpocEnvConfig(**env_config_dict)
+                env = SpocEnv(env_config)
+                return env_id, (env, env_config), None
+            except Exception as e:
+                return env_id, None, f"Failed to create environment: {str(e)}"
            
         
         for i, env_id in enumerate(ids2configs.keys()):
@@ -68,14 +88,20 @@ class SpocService(BaseService):
             # Process results as they complete
             for future in as_completed(futures):
                 env_id = futures[future]
-                env_id, result, error = future.result()
-                if error:
-                    print(f"Error creating environment {env_id}: {error}")
-                    continue
-                
-                env, env_config = result
-                self.environments[env_id] = env
-                self.env_configs[env_id] = env_config
+                try:
+                    env_id, result, error = future.result()
+                    if error:
+                        print(f"Error creating environment {env_id}: {error}")
+                        continue
+                    
+                    env, env_config = result
+                    self.environments[env_id] = env
+                    self.env_configs[env_id] = env_config
+                    print(f"Successfully created environment {env_id}")
+                except Exception as e:
+                    print(f"Exception creating environment {env_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
     
     def reset_batch(self, ids2seeds: Dict[str, Any]) -> Dict[str, Tuple[Any, Any]]:
         """
@@ -92,10 +118,40 @@ class SpocService(BaseService):
         
         # Define worker function
         def reset_single_env(env_id, seed):     
-            env = self.environments[env_id]
-            observation, info = env.reset(seed=seed)
-            serialized_observation = serialize_observation(observation)
-            return env_id, (serialized_observation, info), None
+            if env_id not in self.environments:
+                # Return properly formatted error observation
+                error_obs = {
+                    "obs_str": f"Error: Environment {env_id} not found in service",
+                    "multi_modal_data": {}
+                }
+                error_info = {
+                    "error": f"Environment {env_id} not found",
+                    "metrics": {
+                        "turn_metrics": {"action_is_valid": False, "action_is_effective": False},
+                        "traj_metrics": {"success": False}
+                    }
+                }
+                return env_id, (error_obs, error_info), f"Environment {env_id} not found in service"
+            
+            try:
+                env = self.environments[env_id]
+                observation, info = env.reset(seed=seed)
+                serialized_observation = serialize_observation(observation)
+                return env_id, (serialized_observation, info), None
+            except Exception as e:
+                # Return properly formatted error observation
+                error_obs = {
+                    "obs_str": f"Error resetting environment {env_id}: {str(e)}",
+                    "multi_modal_data": {}
+                }
+                error_info = {
+                    "error": str(e),
+                    "metrics": {
+                        "turn_metrics": {"action_is_valid": False, "action_is_effective": False},
+                        "traj_metrics": {"success": False}
+                    }
+                }
+                return env_id, (error_obs, error_info), str(e)
             
         
         # Use ThreadPoolExecutor for parallel reset
@@ -112,7 +168,19 @@ class SpocService(BaseService):
                 env_id, result, error = future.result()
                 if error:
                     print(f"Error resetting environment {env_id}: {error}")
-                    results[env_id] = ({}, {"error": error})
+                    # Return properly formatted error observation
+                    error_obs = {
+                        "obs_str": f"Error resetting environment {env_id}: {error}",
+                        "multi_modal_data": {}
+                    }
+                    error_info = {
+                        "error": error,
+                        "metrics": {
+                            "turn_metrics": {"action_is_valid": False, "action_is_effective": False},
+                            "traj_metrics": {"success": False}
+                        }
+                    }
+                    results[env_id] = (error_obs, error_info)
                 else:
                     results[env_id] = result
         
@@ -134,24 +202,57 @@ class SpocService(BaseService):
         
         # Define worker function
         def step_single_env(env_id, action):
+            if env_id not in self.environments:
+                # Return properly formatted error observation
+                error_obs = {
+                    "obs_str": f"Error: Environment {env_id} not found in service",
+                    "multi_modal_data": {}
+                }
+                error_info = {
+                    "error": f"Environment {env_id} not found",
+                    "metrics": {
+                        "turn_metrics": {"action_is_valid": False, "action_is_effective": False},
+                        "traj_metrics": {"success": False}
+                    },
+                    "llm_raw_response": action  # 添加llm_raw_response键
+                }
+                return env_id, (error_obs, 0.0, True, error_info), f"Environment {env_id} not found"
+            
             env = self.environments[env_id]
             try:
                 observation, reward, done, info = env.step(action)
             except Exception as e:
                 print(f"Error stepping navigation environment {env_id}: {e}")
                 try:
-                    observation,info=env.reset()
-                    reward=0.0
-                    done=True 
+                    observation, info = env.reset()
+                    reward = 0.0
+                    done = True 
                 except Exception as e:
                     print(f"Error resetting navigation environment {env_id} after step failure: {e}")
-                    env.close()
-                    config=self.env_configs[env_id]
-                    env=SpocEnv(config)
-                    self.environments[env_id]=env
-                    observation,info=env.reset()
-                    reward=0.0
-                    done=True
+                    try:
+                        env.close()
+                        config = self.env_configs[env_id]
+                        env = SpocEnv(config)
+                        self.environments[env_id] = env
+                        observation, info = env.reset()
+                        reward = 0.0
+                        done = True
+                    except Exception as e2:
+                        print(f"Failed to recreate environment {env_id}: {e2}")
+                        # Return properly formatted error observation
+                        error_obs = {
+                            "obs_str": f"Error: Failed to step/reset environment {env_id}: {str(e2)}",
+                            "multi_modal_data": {}
+                        }
+                        error_info = {
+                            "error": str(e2),
+                            "metrics": {
+                                "turn_metrics": {"action_is_valid": False, "action_is_effective": False},
+                                "traj_metrics": {"success": False}
+                            },
+                            "llm_raw_response": action  # 添加llm_raw_response键
+                        }
+                        return env_id, (error_obs, 0.0, True, error_info), str(e2)
                     
             serialized_observation = serialize_observation(observation)
             return env_id, (serialized_observation, reward, done, info), None
@@ -171,7 +272,20 @@ class SpocService(BaseService):
                 env_id, result, error = future.result()
                 if error:
                     print(f"Error stepping environment {env_id}: {error}")
-                    results[env_id] = ({}, 0.0, True, {"error": error})
+                    # Return properly formatted error observation
+                    error_obs = {
+                        "obs_str": f"Error stepping environment {env_id}: {error}",
+                        "multi_modal_data": {}
+                    }
+                    error_info = {
+                        "error": error,
+                        "metrics": {
+                            "turn_metrics": {"action_is_valid": False, "action_is_effective": False},
+                            "traj_metrics": {"success": False}
+                        },
+                        "llm_raw_response": ""  # 这里action不可用，使用空字符串
+                    }
+                    results[env_id] = (error_obs, 0.0, True, error_info)
                 else:
                     results[env_id] = result
         
@@ -191,8 +305,14 @@ class SpocService(BaseService):
         
         # Define worker function
         def compute_reward_single_env(env_id):
-            env = self.environments[env_id]
-            return env_id, env.compute_reward(), None
+            if env_id not in self.environments:
+                return env_id, 0.0, f"Environment {env_id} not found in service"
+            try:
+                env = self.environments[env_id]
+                return env_id, env.compute_reward(), None
+            except Exception as e:
+                print(f"Error computing reward for environment {env_id}: {e}")
+                return env_id, 0.0, str(e)
            
         
         # Use ThreadPoolExecutor for parallel computation
@@ -229,8 +349,14 @@ class SpocService(BaseService):
         
         # Define worker function
         def get_system_prompt_single_env(env_id):
-            env = self.environments[env_id]
-            return env_id, env.system_prompt(), None
+            if env_id not in self.environments:
+                return env_id, f"Error: Environment {env_id} not found in service", f"Environment {env_id} not found"
+            try:
+                env = self.environments[env_id]
+                return env_id, env.system_prompt(), None
+            except Exception as e:
+                print(f"Error getting system prompt for environment {env_id}: {e}")
+                return env_id, f"Error: {str(e)}", str(e)
        
         
         # Use ThreadPoolExecutor for parallel retrieval
@@ -266,9 +392,16 @@ class SpocService(BaseService):
         
         # Define worker function
         def close_single_env(env_id):      
-            env = self.environments[env_id]
-            env.close()
-            return None
+            if env_id not in self.environments:
+                print(f"Warning: Environment {env_id} not found during close")
+                return None
+            try:
+                env = self.environments[env_id]
+                env.close()
+                return None
+            except Exception as e:
+                print(f"Error closing environment {env_id}: {e}")
+                return str(e)
             
         
         # Use ThreadPoolExecutor for parallel closing

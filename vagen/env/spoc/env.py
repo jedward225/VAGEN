@@ -82,6 +82,10 @@ class SpocEnv(BaseEnv):
         self.step_length = self.config.step_length
         # Environment setup
         self.resolution = config.resolution
+        # 检测是否有可用的显示环境
+        import os
+        display_available = os.environ.get('DISPLAY') is not None
+        
         self.thor_config = {
             "agentMode": "default",
             "gridSize": 0.1,
@@ -91,10 +95,12 @@ class SpocEnv(BaseEnv):
             "width": self.resolution,
             "height": self.resolution,
             "fieldOfView": config.fov,
-            "platform": CloudRendering,
+            "platform": "CloudRendering" if not display_available else "Linux64",
+            "headless": False,
             "gpu_device": config.get('gpu_device', 0),
             "server_timeout": 300,
             "server_start_timeout": 300,
+            "quality": "Low",
         }
         
         # Initialize AI2-THOR controller with Stretch configuration
@@ -243,6 +249,9 @@ class SpocEnv(BaseEnv):
         done = False
         info = {}
         info.update(rst)
+        
+        # 重要：添加llm_raw_response键，rollout_manager需要它来构建prompt
+        info['llm_raw_response'] = action_str
             
             
         # Execute valid actions
