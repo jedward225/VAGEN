@@ -46,6 +46,9 @@ tmux send-keys -t "$SERVER_SESSION" "conda activate vagen" C-m
 tmux send-keys -t "$SERVER_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$SERVER_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTHONHASHSEED=0" C-m
+tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-m
+tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
+tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
 # Start the server
 tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT" C-m
 
@@ -61,6 +64,12 @@ tmux send-keys -t "$TRAIN_SESSION" "conda activate vagen" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export PYTHONHASHSEED=0" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export NCCL_P2P_DISABLE=1" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export NCCL_IB_DISABLE=1" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export MASTER_PORT=29500" C-m
 tmux send-keys -t "$TRAIN_SESSION" "set -x" C-m
 
 # First create the dataset
@@ -75,16 +84,16 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     algorithm.high_level_gamma=1.0 \\
     data.train_files=data/$EXPERIMENT_NAME/train.parquet \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
-    data.train_batch_size=8 \\
+    data.train_batch_size=2 \\
     data.max_prompt_length=1024 \\
     data.max_response_length=300 \\
-    data.max_trajectory_length=3600 \\
+    data.max_trajectory_length=1024 \\
     data.image_key=images \\
     data.truncation=left \\
     actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     actor_rollout_ref.actor.optim.lr=1e-6 \\
     actor_rollout_ref.model.use_remove_padding=True \\
-    actor_rollout_ref.actor.ppo_mini_batch_size=16 \\
+    actor_rollout_ref.actor.ppo_mini_batch_size=2 \\
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.actor.use_kl_loss=False \\
     actor_rollout_ref.actor.kl_loss_coef=0.001 \\
@@ -95,10 +104,12 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.15 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \\
+    actor_rollout_ref.rollout.max_num_seqs=16 \\
+    actor_rollout_ref.rollout.max_num_batched_tokens=1024 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
-    actor_rollout_ref.rollout.enforce_eager=False \\
-    actor_rollout_ref.rollout.free_cache_engine=False \\
+    actor_rollout_ref.rollout.enforce_eager=True \\
+    actor_rollout_ref.rollout.free_cache_engine=True \\
     actor_rollout_ref.rollout.n=1 \\
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.ref.fsdp_config.param_offload=True \\
@@ -109,8 +120,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     critic.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     critic.model.enable_gradient_checkpointing=True \\
     critic.ppo_micro_batch_size_per_gpu=1 \\
-    critic.model.fsdp_config.param_offload=False \\
-    critic.model.fsdp_config.optimizer_offload=False \\
+    critic.ppo_mini_batch_size=2 \\
+    critic.model.fsdp_config.param_offload=True \\
+    critic.model.fsdp_config.optimizer_offload=True \\
     algorithm.kl_ctrl.kl_coef=0.001 \\
     trainer.critic_warmup=0 \\
     trainer.logger=['console','wandb'] \\
@@ -120,15 +132,16 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     trainer.nnodes=1 \\
     trainer.save_freq=100 \\
     trainer.test_freq=25 \\
-    trainer.total_training_steps=500 \\
+    trainer.total_training_steps=100 \\
     rollout_manager.max_turns=5 \\
     rollout_manager.window_size=8 \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
     rollout_manager.use_gae_mask=True \\
+    rollout_manager.n_gpus_per_node=1 \\
     trainer.val_before_train=True \\
     trainer.val_generations_to_log_to_wandb=8 \\
-    rollout_manager.n_trajectory=6 \\
+    rollout_manager.n_trajectory=2 \\
     rollout_manager.use_service=True \\
     rollout_manager.timeout=600 \\
     rollout_manager.base_url=\"http://localhost:$PORT\" \\
@@ -150,7 +163,16 @@ echo "NOTE: The sessions will remain active. To detach from a session use Ctrl+B
 echo ""
 echo "SPOC-specific adjustments made:"
 echo "- Single GPU configuration (n_gpus_per_node=1)"
-echo "- Increased max_trajectory_length to 3600 for longer manipulation sequences"
-echo "- Reduced batch size to 8 for complex manipulation tasks"
-echo "- Increased timeout to 600s for Stretch robot interactions"
-echo "- Adjusted rollout manager parameters for manipulation complexity" 
+echo "- Tensor model parallel size: 1 (single GPU)"
+echo "- GPU memory utilization: 0.5 (aggressive memory optimization)"
+echo "- Batch size: 2 (minimum for training)"
+echo "- PPO mini batch size: 2 (reduced for memory)"
+echo "- Trajectory count: 2 (minimal for memory)"
+echo "- Max num seqs: 16, Max batched tokens: 1024"
+echo "- Enforce eager mode: True (no CUDA graphs)"
+echo "- Free cache engine: True (release memory)"
+echo "- FSDP parameter/optimizer offloading enabled for memory efficiency"
+echo "- Ray resource management optimized for container environment"
+echo "- PyTorch CUDA allocator optimized (max_split_size_mb=128)"
+echo "- Set max_trajectory_length to 1024 (optimized for memory constraints)"
+echo "- Increased timeout to 600s for Stretch robot interactions" 
