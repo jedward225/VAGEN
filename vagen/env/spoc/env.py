@@ -476,26 +476,8 @@ class SpocEnv(BaseEnv):
             add_example=False  # No examples for action and init obs
         )
         
-        # -------------  准备多模态图片 -------------
-        # 1. first person view RGB
-        frame_fp = convert_numpy_to_PIL(self.env.last_event.frame)
-
-        # 2. 如果 multiview 打开并且 third_party_camera 已添加，则取俯视图；否则使用第一张图占位
-        frame_tp = None
-        try:
-            if self.multiview and hasattr(self.env.last_event, "third_party_camera_frames"):
-                third_frames = self.env.last_event.third_party_camera_frames
-                if third_frames and len(third_frames) > 0:
-                    frame_tp = convert_numpy_to_PIL(third_frames[0])
-        except Exception:
-            frame_tp = None
-
-        # 构造图片列表，至少保证与 <image> 占位符数量一致
-        images: list = [frame_fp]
-        if frame_tp is not None:
-            images.append(frame_tp)
-
-        multi_modal_data = {img_placeholder: images}
+        # ----- 文本模式：不传输真实图片，只保留文字描述 -----
+        multi_modal_data = {img_placeholder: []}
         
         # Get current arm state
         arm_state = self._get_arm_state()
@@ -518,14 +500,10 @@ class SpocEnv(BaseEnv):
                 arm_state=arm_state
             ) + "\n" + format_prompt_text
         
-        # ----------------  占位符数量检查 & 回填 ----------------
-        placeholder_cnt = str(obs_str).count(str(img_placeholder))
-        if len(multi_modal_data[img_placeholder]) < placeholder_cnt:
-            # 如果图片数量不足，则复制最后一张补齐
-            last_img = multi_modal_data[img_placeholder][-1]
-            deficit = placeholder_cnt - len(multi_modal_data[img_placeholder])
-            multi_modal_data[img_placeholder].extend([last_img] * deficit)
-
+        # ----------------  替换 <image> 为文本占位符 ----------------
+        if isinstance(img_placeholder, str) and img_placeholder in obs_str:
+            obs_str = obs_str.replace(img_placeholder, "[VISUAL]")
+ 
         return {
             "obs_str": obs_str,
             "multi_modal_data": multi_modal_data,
@@ -540,11 +518,11 @@ class SpocEnv(BaseEnv):
         Returns:
             System prompt string
         """
-        # Get format prompt with examples for system prompt
+        # 为了避免 prompt 过长，这里不在 system_prompt 中附加示例
         format_prompt_text = self.format_prompt_func(
             max_actions_per_step=self.config.max_actions_per_step,
             action_sep=self.config.action_sep,
-            add_example=False  # in order to shorten the system prompt
+            add_example=False # in order to shorten the system prompt
         )
         
     

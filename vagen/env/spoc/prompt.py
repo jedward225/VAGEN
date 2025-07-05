@@ -30,6 +30,12 @@ FORMAT_CONFIGS = {
 
 # system_prompt function for SPOC robot manipulation tasks
 def system_prompt(**kwargs):
+    return (
+        "You are a Stretch robot. "
+        "Respond with <answer>action1,action2</answer>. "
+        "Available actions: moveahead, moveback, rotateright, rotateleft, "
+        "pickup, dropoff, move_arm_out, move_arm_in, ... (20 total)."
+    )
     example = "" # Default empty example
     # Internally uses kwargs.get("format"), as in your original code
     selected_format = kwargs.get("format", "default")

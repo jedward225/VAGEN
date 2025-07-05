@@ -94,7 +94,8 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.train_batch_size=2 \\
     data.max_prompt_length=1024 \\
     data.max_response_length=200 \\
-    data.max_trajectory_length=512 \\
+    data.max_trajectory_length=1200 \\
+    actor_rollout_ref.rollout.max_trajectory_length=1200 \\
     data.image_key=images \\
     data.truncation=left \\
     actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
@@ -111,9 +112,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.4 \\
-    actor_rollout_ref.rollout.max_num_seqs=16 \\
-    actor_rollout_ref.rollout.max_num_batched_tokens=1024 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.3 \\
+    actor_rollout_ref.rollout.max_num_seqs=8 \\
+    actor_rollout_ref.rollout.max_num_batched_tokens=1800 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
     actor_rollout_ref.rollout.free_cache_engine=True \\
@@ -141,7 +142,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     trainer.test_freq=25 \\
     trainer.total_training_steps=100 \\
     rollout_manager.max_turns=5 \\
-    rollout_manager.window_size=8 \\
+    rollout_manager.window_size=1 \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
     rollout_manager.use_gae_mask=True \\
@@ -177,7 +178,7 @@ echo "- GPU memory utilization: 0.4 (optimized for 2x A100)"
 echo "- Train batch size: 2 (scaled for dual GPU)"
 echo "- PPO mini batch size: 2 (scaled for dual GPU)"
 echo "- Trajectory count: 2 (scaled for dual GPU)"
-echo "- Max trajectory length: 512 (reduced from 1024)"
+echo "- Max trajectory length: 1200 (足以覆盖长 prompt)"
 echo "- Max response length: 200 (reduced from 300)"
 echo "- Max num seqs: 16, Max batched tokens: 1024 (optimized for dual GPU)"
 echo "- Enforce eager mode: True (no CUDA graphs)"
