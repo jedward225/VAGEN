@@ -100,7 +100,7 @@ class SpocEnv(BaseEnv):
             "gpu_device": config.get('gpu_device', 0),
             "server_timeout": 300,
             "server_start_timeout": 300,
-            "quality": "Low",
+            "quality": "Low",   # 环境暂时设置的quality很低
         }
         
         # Initialize AI2-THOR controller with Stretch configuration
@@ -476,13 +476,26 @@ class SpocEnv(BaseEnv):
             add_example=False  # No examples for action and init obs
         )
         
-        # Get the RGB frame from the environment
-        frame = self.env.last_event.frame
-        
-        # Convert to PIL image for multimodal inputs
-        multi_modal_data = {
-            img_placeholder: [convert_numpy_to_PIL(frame)]
-        }
+        # -------------  准备多模态图片 -------------
+        # 1. first person view RGB
+        frame_fp = convert_numpy_to_PIL(self.env.last_event.frame)
+
+        # 2. 如果 multiview 打开并且 third_party_camera 已添加，则取俯视图；否则使用第一张图占位
+        frame_tp = None
+        try:
+            if self.multiview and hasattr(self.env.last_event, "third_party_camera_frames"):
+                third_frames = self.env.last_event.third_party_camera_frames
+                if third_frames and len(third_frames) > 0:
+                    frame_tp = convert_numpy_to_PIL(third_frames[0])
+        except Exception:
+            frame_tp = None
+
+        # 构造图片列表，至少保证与 <image> 占位符数量一致
+        images: list = [frame_fp]
+        if frame_tp is not None:
+            images.append(frame_tp)
+
+        multi_modal_data = {img_placeholder: images}
         
         # Get current arm state
         arm_state = self._get_arm_state()
@@ -505,9 +518,17 @@ class SpocEnv(BaseEnv):
                 arm_state=arm_state
             ) + "\n" + format_prompt_text
         
+        # ----------------  占位符数量检查 & 回填 ----------------
+        placeholder_cnt = str(obs_str).count(str(img_placeholder))
+        if len(multi_modal_data[img_placeholder]) < placeholder_cnt:
+            # 如果图片数量不足，则复制最后一张补齐
+            last_img = multi_modal_data[img_placeholder][-1]
+            deficit = placeholder_cnt - len(multi_modal_data[img_placeholder])
+            multi_modal_data[img_placeholder].extend([last_img] * deficit)
+
         return {
             "obs_str": obs_str,
-            "multi_modal_data": multi_modal_data
+            "multi_modal_data": multi_modal_data,
         }
     
     def system_prompt(self):

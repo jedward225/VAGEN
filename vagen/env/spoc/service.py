@@ -7,23 +7,6 @@ from vagen.server.serial import serialize_observation
 from .service_config import SpocServiceConfig
 from vagen.env.utils.state_reward_text_utils import service_state_reward_wrapper
 
-"""
-info = {
-    # parse_func返回的内容
-    ...,
-    "llm_raw_response": action_str,  # 你加的
-    "metrics": metrics,
-    "is_format_rewarded": ...,
-    "distance": ...,
-    "instruction": ...,
-    "env_step": ...,
-    "episode_elapsed_seconds": ...,
-    "task_success": ...,
-    "last_action_success": ...,
-    "env_feedback": ...,
-}
-"""
-
 class SpocService(BaseService):
     """
     Service class for SPOC environments with Stretch robot manipulation tasks.
@@ -60,7 +43,7 @@ class SpocService(BaseService):
             try:
                 # Verify environment type
                 env_name = config.get('env_name', 'navigation')
-                if env_name != 'navigation':
+                if env_name not in ('navigation', 'spoc'):
                     return env_id, None, f"Expected environment type 'navigation', got '{env_name}'"
                 
                 env_config_dict = config['env_config']
