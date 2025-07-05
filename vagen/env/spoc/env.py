@@ -544,7 +544,7 @@ class SpocEnv(BaseEnv):
         format_prompt_text = self.format_prompt_func(
             max_actions_per_step=self.config.max_actions_per_step,
             action_sep=self.config.action_sep,
-            add_example=True  # Always true for system prompt
+            add_example=False  # in order to shorten the system prompt
         )
         
     
