@@ -75,6 +75,9 @@ class SpocService(BaseService):
                     env_id, result, error = future.result()
                     if error:
                         print(f"Error creating environment {env_id}: {error}")
+                        # 如果创建失败，从 device_status 中移除该 env_id，防止后续 reset/step 找不到 env
+                        for env_set in self.device_status.values():
+                            env_set.discard(env_id)
                         continue
                     
                     env, env_config = result

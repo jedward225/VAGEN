@@ -112,8 +112,8 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.3 \\
-    actor_rollout_ref.rollout.max_num_seqs=8 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.34 \\
+    actor_rollout_ref.rollout.max_num_seqs=4 \\
     actor_rollout_ref.rollout.max_num_batched_tokens=1800 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
@@ -138,7 +138,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     trainer.experiment_name=$EXPERIMENT_NAME \\
     trainer.n_gpus_per_node=2 \\
     trainer.nnodes=1 \\
-    trainer.save_freq=100 \\
+    trainer.save_freq=25 \\
     trainer.test_freq=25 \\
     trainer.total_training_steps=100 \\
     rollout_manager.max_turns=5 \\
@@ -149,9 +149,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.n_gpus_per_node=2 \\
     trainer.val_before_train=False \\
     trainer.val_generations_to_log_to_wandb=8 \\
-    rollout_manager.n_trajectory=2 \\
+    rollout_manager.n_trajectory=1 \\
     rollout_manager.use_service=True \\
-    rollout_manager.timeout=600 \\
+    rollout_manager.timeout=3000 \\
     rollout_manager.base_url=\"http://localhost:$PORT\" \\
     2>&1 | tee $EXPERIMENT_NAME.log" C-m
 
@@ -174,16 +174,17 @@ echo "SPOC-specific adjustments made for 2x A100:"
 echo "- Model: Qwen2.5-VL-3B-Instruct (latest 3B multimodal model)"
 echo "- Dual GPU configuration (n_gpus_per_node=2)"
 echo "- Tensor model parallel size: 2 (dual GPU)"
-echo "- GPU memory utilization: 0.4 (optimized for 2x A100)"
+echo "- GPU memory utilization: 0.34 (与 rollout.gpu_memory_utilization 保持一致)"
 echo "- Train batch size: 2 (scaled for dual GPU)"
 echo "- PPO mini batch size: 2 (scaled for dual GPU)"
-echo "- Trajectory count: 2 (scaled for dual GPU)"
+echo "- Trajectory count: 1 (每 GPU 单环境，减小验证并发)"
 echo "- Max trajectory length: 1200 (足以覆盖长 prompt)"
-echo "- Max response length: 200 (reduced from 300)"
-echo "- Max num seqs: 16, Max batched tokens: 1024 (optimized for dual GPU)"
+echo "- Max response length: 200 (rollout 再限 256，上限靠 max_response_length 控制)"
+echo "- Max num seqs: 4, Max batched tokens: 1800 (与 vLLM rollout 设置一致)"
 echo "- Enforce eager mode: True (no CUDA graphs)"
 echo "- Free cache engine: True (release memory)"
 echo "- FSDP parameter/optimizer offloading enabled for memory efficiency"
 echo "- Ray resource management optimized for container environment"
 echo "- PyTorch CUDA allocator optimized (max_split_size_mb=128)"
+echo "- Validation frequency延长至 200 step 以减少验证开销"
 echo "- Increased timeout to 600s for Stretch robot interactions" 

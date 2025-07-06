@@ -138,4 +138,32 @@ vLLM V0 对多模态 KV-Cache 占用巨大（警告里写 98 k token worst-case�
       ```
    ④ 高效验证：把 server & trainer 端口/网址改为 unix-socket IPC 可省去 HTTP 超时问题（待官方 PR）。
 
-（注）spoc-note.md 仅做思路纪录，任何参数改动请同步到 run_tmux.sh，否则下次 quick_fix_restart 仍会用旧值。
+
+六、本轮（global step 17→24）运行快照与后续计划
+---------------------------------------------
+1. 训练是否稳定？
+   • **未再出现 OOM / ReadTimeout**，vLLM+Ray 正常供能；GPU 占用单卡 ≈15 GiB，留有约 7 GiB 余量。
+   • `actor_rollout_ref.rollout.gpu_memory_utilization=0.33` 与 1800 token KV-Cache 预分配配合良好。
+
+2. 指标变化
+   • 步长 90-110 s，其中 **生成阶段 65-87 s**，占总时长 70-80 %。
+   • actor/entropy≈0.4→0.8，grad_norm ≈6-8，已不再有 `nan`。
+   • 成功率依旧 0，属 early exploration 预期。
+
+3. 风险点
+   • 最大 response 可达 603 token，远超我们的 `data.max_response_length=200` ——> 生成侧尚未限长。
+   • 训练到 50 step 会触发 val，仍可能引发 **ReadTimeout**（验证阶段创建 env 批太慢）。
+
+4. 建议改动（已 TODO）
+   A) 在 `run_tmux.sh` 追加
+      `actor_rollout_ref.rollout.max_response_length=256 \
+       actor_rollout_ref.rollout.stop=<|endoftext|> \
+`   强制生成不超过 256 token。
+   B) 把 `trainer.test_freq` 暂调大到 200；或改为 `rollout_manager.n_trajectory=1` during val。
+   C) 若后续要真正恢复 `<image>` token，可把
+      `data.max_prompt_length=512` 且逐步降低 `max_response_length`，观察 KV-Cache。
+
+5. 下一步
+   • 先跑满 1-2k step 观察 reward/advantage 曲线是否抬头；
+   • 若长时间 success=0，考虑引入 curriculum：① shorter fetch tasks → ② full fetch；
+   • 按需打开 image patch、DINO encoder做对比实验。
