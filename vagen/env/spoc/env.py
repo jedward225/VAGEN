@@ -154,7 +154,7 @@ class SpocEnv(BaseEnv):
         """
         # Reset the environment with the proper seed
         
-        idx = seed % self.number_of_episodes if seed is not None else 0
+        idx = seed % self.number_of_episodes if seed is not None else np.random.randint(0, self.number_of_episodes) # in order to make sure the seed is not None
         
         # Get the trajectory data from ChoresDataset
         traj_data = load_chores_episode(self.config.chores_split, self.config.task_type, idx)

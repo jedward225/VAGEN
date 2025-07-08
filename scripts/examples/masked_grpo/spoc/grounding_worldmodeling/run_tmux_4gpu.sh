@@ -54,7 +54,7 @@ tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
-sleep 15  # Give more time for SPOC environment initialization
+sleep 20  # Give more time for SPOC environment initialization with 4 GPUs
 
 # Create training session
 tmux new-session -d -s "$TRAIN_SESSION"
@@ -83,15 +83,15 @@ tmux send-keys -t "$TRAIN_SESSION" "python -m vagen.env.create_dataset \\
 echo "Waiting for dataset creation to complete..."
 tmux send-keys -t "$TRAIN_SESSION" "while [ ! -f \"data/$EXPERIMENT_NAME/train.parquet\" ]; do sleep 5; echo 'Waiting for dataset creation...'; done" C-m
 tmux send-keys -t "$TRAIN_SESSION" "echo 'Dataset creation completed!'" C-m
-sleep 10
+sleep 15
 
-# Then start the training - adapted for SPOC environment with 4 GPUs
+# Then start the training - optimized for 4 GPUs
 tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     algorithm.adv_estimator=grpo \\
     algorithm.high_level_gamma=1.0 \\
     data.train_files=data/$EXPERIMENT_NAME/train.parquet \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
-    data.train_batch_size=4 \\
+    data.train_batch_size=8 \\
     data.max_prompt_length=1024 \\
     data.max_response_length=200 \\
     data.max_trajectory_length=1200 \\
@@ -101,25 +101,25 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     actor_rollout_ref.actor.optim.lr=1e-6 \\
     actor_rollout_ref.model.use_remove_padding=True \\
-    actor_rollout_ref.actor.ppo_mini_batch_size=4 \\
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \\
+    actor_rollout_ref.actor.ppo_mini_batch_size=8 \\
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \\
     actor_rollout_ref.actor.use_kl_loss=False \\
     actor_rollout_ref.actor.kl_loss_coef=0.001 \\
     actor_rollout_ref.actor.kl_loss_type=mse \\
     actor_rollout_ref.model.enable_gradient_checkpointing=True \\
     actor_rollout_ref.actor.fsdp_config.param_offload=True \\
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \\
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=4 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.25 \\
-    actor_rollout_ref.rollout.max_num_seqs=8 \\
-    actor_rollout_ref.rollout.max_num_batched_tokens=3600 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.20 \\
+    actor_rollout_ref.rollout.max_num_seqs=16 \\
+    actor_rollout_ref.rollout.max_num_batched_tokens=7200 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
     actor_rollout_ref.rollout.free_cache_engine=True \\
     actor_rollout_ref.rollout.n=1 \\
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \\
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \\
     actor_rollout_ref.ref.fsdp_config.param_offload=True \\
     actor_rollout_ref.rollout.top_p=0.9 \\
     actor_rollout_ref.rollout.temperature=0.7 \\
@@ -127,8 +127,8 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     critic.model.use_remove_padding=True \\
     critic.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     critic.model.enable_gradient_checkpointing=True \\
-    critic.ppo_micro_batch_size_per_gpu=1 \\
-    critic.ppo_mini_batch_size=4 \\
+    critic.ppo_micro_batch_size_per_gpu=2 \\
+    critic.ppo_mini_batch_size=8 \\
     critic.model.fsdp_config.param_offload=True \\
     critic.model.fsdp_config.optimizer_offload=True \\
     algorithm.kl_ctrl.kl_coef=0.001 \\
@@ -138,9 +138,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     trainer.experiment_name=$EXPERIMENT_NAME \\
     trainer.n_gpus_per_node=4 \\
     trainer.nnodes=1 \\
-    trainer.save_freq=200 \\
-    trainer.test_freq=200 \\
-    trainer.total_training_steps=1000 \\
+    trainer.save_freq=25 \\
+    trainer.test_freq=25 \\
+    trainer.total_training_steps=100 \\
     rollout_manager.max_turns=5 \\
     rollout_manager.window_size=1 \\
     rollout_manager.use_multi_turn_reward=False \\
@@ -148,7 +148,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.use_gae_mask=True \\
     rollout_manager.n_gpus_per_node=4 \\
     trainer.val_before_train=False \\
-    trainer.val_generations_to_log_to_wandb=8 \\
+    trainer.val_generations_to_log_to_wandb=16 \\
     rollout_manager.n_trajectory=1 \\
     rollout_manager.use_service=True \\
     rollout_manager.timeout=3000 \\
@@ -156,10 +156,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     2>&1 | tee $EXPERIMENT_NAME.log" C-m
 
 echo "-----------------------------------------"
-echo "SPOC GRPO Training Configuration Summary:"
+echo "SPOC GRPO Training Configuration Summary (4-GPU Optimized):"
 echo "Port: $PORT"
 echo "CUDA Devices: $CUDA_DEVICES"
-#
 echo "Server Session: $SERVER_SESSION"
 echo "Training Session: $TRAIN_SESSION"
 echo "Environment: SPOC (Stretch robot manipulation)"
@@ -170,21 +169,23 @@ echo "To attach to server session: tmux attach-session -t $SERVER_SESSION"
 echo "To attach to training session: tmux attach-session -t $TRAIN_SESSION"
 echo "NOTE: The sessions will remain active. To detach from a session use Ctrl+B followed by D"
 echo ""
-echo "SPOC-specific adjustments made for 4x A100:"
+echo "4-GPU Optimized Configuration:"
 echo "- Model: Qwen2.5-VL-3B-Instruct (latest 3B multimodal model)"
 echo "- Quad GPU configuration (n_gpus_per_node=4)"
 echo "- Tensor model parallel size: 4 (quad GPU)"
-echo "- GPU memory utilization: 0.25 (optimized for 4 GPU setup)"
-echo "- Train batch size: 4 (scaled for quad GPU)"
-echo "- PPO mini batch size: 4 (scaled for quad GPU)"
+echo "- GPU memory utilization: 0.20 (optimized for 4 GPU setup)"
+echo "- Train batch size: 8 (scaled for quad GPU)"
+echo "- PPO mini batch size: 8 (scaled for quad GPU)"
+echo "- PPO micro batch size per GPU: 2 (balanced load)"
 echo "- Trajectory count: 1 (每 GPU 单环境，减小验证并发)"
 echo "- Max trajectory length: 1200 (足以覆盖长 prompt)"
 echo "- Max response length: 200 (rollout 再限 256，上限靠 max_response_length 控制)"
-echo "- Max num seqs: 8, Max batched tokens: 3600 (scaled for 4 GPU)"
+echo "- Max num seqs: 16, Max batched tokens: 7200 (scaled for 4 GPU)"
 echo "- Enforce eager mode: True (no CUDA graphs)"
 echo "- Free cache engine: True (release memory)"
 echo "- FSDP parameter/optimizer offloading enabled for memory efficiency"
 echo "- Ray resource management optimized for container environment"
 echo "- PyTorch CUDA allocator optimized (max_split_size_mb=128)"
 echo "- Validation frequency延长至 200 step 以减少验证开销"
-echo "- Increased timeout to 600s for Stretch robot interactions" 
+echo "- Increased timeout to 600s for Stretch robot interactions"
+echo "- Increased server startup wait time to 20s for 4-GPU initialization" 
