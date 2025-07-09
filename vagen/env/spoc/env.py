@@ -86,7 +86,7 @@ class SpocEnv(BaseEnv):
         # 检测 DISPLAY 环境变量是否存在，以决定使用本地渲染还是 EGL Headless
         import os
         display_available = os.environ.get('DISPLAY') is not None
-
+        
         # 根据是否有显示设备动态选择平台/是否 headless
         if display_available:
             platform_choice = "Linux64"   # 有本地 X11 的情况

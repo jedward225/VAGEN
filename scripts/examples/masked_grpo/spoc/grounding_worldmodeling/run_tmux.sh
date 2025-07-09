@@ -14,6 +14,12 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Extract experiment name from the path
 # This will take the last 3 parts of the path: grounding_worldmodeling/spoc/masked_grpo
 EXPERIMENT_NAME=$(echo $SCRIPT_DIR | rev | cut -d'/' -f1-3 | rev | tr '/' '-')
+
+# --------- 磁盘清理：如已存在同名实验目录，先删除 ---------
+if [ -d "data/$EXPERIMENT_NAME" ]; then
+  echo "[Cleanup] Remove old data/$EXPERIMENT_NAME to free disk space"
+  rm -rf "data/$EXPERIMENT_NAME"
+fi
 echo "Experiment name: $EXPERIMENT_NAME"
 
 # Find available session names
@@ -147,7 +153,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.use_loss_mask=True \\
     rollout_manager.use_gae_mask=True \\
     rollout_manager.n_gpus_per_node=4 \\
-    trainer.val_before_train=False \\
+    trainer.val_before_train=True \\
     trainer.val_generations_to_log_to_wandb=8 \\
     rollout_manager.n_trajectory=1 \\
     rollout_manager.use_service=True \\
