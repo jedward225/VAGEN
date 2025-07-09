@@ -479,7 +479,7 @@ class SpocEnv(BaseEnv):
         }
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/liujiajun/spoc_data/fifteen_type"    first
     # Example usage for debugging the environment
     import os
     
