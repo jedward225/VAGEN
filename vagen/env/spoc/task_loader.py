@@ -1,144 +1,160 @@
 """
 Task loader for SPOC environment with ChoresDataset.
-This module handles loading episode data from the ChoresDataset.
+This module handles loading episode data from the SPOC ChoresDataset format.
 """
-
 import os
 import json
-import random
-from typing import Dict, Any
+import h5py
+import glob
+import numpy as np
+from typing import Dict, Any, List
 
-
-def load_chores_episode(split: str, task_type: str, idx: int) -> Dict[str, Any]:
+class ChoresDataset:
     """
-    Load a single episode from the ChoresDataset.
-    
-    Args:
-        split: Dataset split (e.g., "fifteen", "val", "train")
-        task_type: Task type ("Fetch", "ObjectNav", "RoomVisit", etc.)
-        idx: Episode index
+    A class to handle loading data from the SPOC Chores dataset,
+    which is stored in HDF5 format.
+    """
+    def __init__(self, data_path: str, task_type: str, split: str = "train"):
+        """
+        Initializes the dataset by finding all episodes.
+
+        Args:
+            data_path (str): The root directory of the downloaded SPOC dataset 
+                             (e.g., /path/to/save/dir/fifteen_type).
+            task_type (str): The specific task to load (e.g., "FetchType").
+            split (str): The dataset split, "train" or "val".
+        """
+        self.data_path = data_path
+        self.task_type = task_type
+        self.split = split
+        self.episode_paths = self._find_episodes()
+
+        if not self.episode_paths:
+            raise FileNotFoundError(
+                f"No episodes found for task '{task_type}' in '{data_path}/{split}'. "
+                f"Please check your path and that the data is downloaded."
+            )
+
+    def _find_episodes(self) -> List[Dict[str, Any]]:
+        """Scans the data directory to find all HDF5 files and index episodes within them."""
+        search_path = os.path.join(self.data_path, self.task_type, self.split, "*", "hdf5_sensors.hdf5")
+        hdf5_files = glob.glob(search_path)
         
-    Returns:
-        Dict containing episode data:
-        {
-            'scene': str,                    # Scene identifier
-            'agentPose': Dict,              # Agent initial pose
-            'targetObjectType': str,         # Target object type
-            'targetObjectId': str,          # Target object ID
-            'instruction': str,             # Natural language instruction
-            'task_type': str,               # Task type
-            'target_position': Dict,        # Target object position
+        episode_paths = []
+        for hdf5_file in hdf5_files:
+            house_id = os.path.basename(os.path.dirname(hdf5_file))
+            try:
+                with h5py.File(hdf5_file, 'r') as f:
+                    # Each group in the HDF5 file is an episode
+                    for episode_key in f.keys():
+                        episode_paths.append({
+                            "hdf5_path": hdf5_file,
+                            "episode_key": episode_key,
+                            "house_id": house_id,
+                        })
+            except Exception as e:
+                print(f"Warning: Could not read {hdf5_file}. Error: {e}")
+        
+        return episode_paths
+
+    def __len__(self) -> int:
+        """Returns the total number of episodes."""
+        return len(self.episode_paths)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """
+        Loads a single episode's data from an HDF5 file.
+        
+        Args:
+            idx (int): The index of the episode to load.
+            
+        Returns:
+            A dictionary containing the initial state and task information for the episode.
+        """
+        if idx >= len(self):
+            raise IndexError("Index out of range")
+            
+        episode_info = self.episode_paths[idx]
+        
+        with h5py.File(episode_info["hdf5_path"], 'r') as f:
+            episode_group = f[episode_info["episode_key"]]
+            
+            # Extract task specification to get the instruction
+            task_spec_json = episode_group["templated_task_spec"][0].decode('utf-8')
+            task_spec = json.loads(task_spec_json)
+            instruction = task_spec["prompt"]
+            
+            # Extract initial agent pose
+            # last_agent_location stores pose at the *end* of each step, so index 0 is the initial pose
+            initial_pose_data = episode_group["last_agent_location"][0]
+            
+            # Extract target object info
+            target_object_type = task_spec["object_type"]
+            # The target object ID and position are not easily available at the episode level
+            # We will derive them if needed, but for now, focus on the instruction.
+
+        agent_pose = {
+            "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
+            "rotation": initial_pose_data[3],
+            "horizon": initial_pose_data[4],
         }
-    """
-    
-    # For now, create mock data that matches AI2-THOR format
-    # TODO: Replace with actual ChoresDataset loading when data is available
-    
-    # Mock episode data for testing
-    mock_episodes = [
-        {
-            'scene': 'FloorPlan1',
-            'agentPose': {
-                'position': {'x': 0.0, 'y': 0.0, 'z': 0.0},
-                'rotation': 0.0,
-                'horizon': 0.0
-            },
-            'targetObjectType': 'Apple',
-            'targetObjectId': 'Apple|+01.20|+00.90|+00.42',
-            'instruction': 'fetch an apple',
-            'task_type': task_type,
-            'target_position': {'x': 1.20, 'y': 0.90, 'z': 0.42}
-        },
-        {
-            'scene': 'FloorPlan2', 
-            'agentPose': {
-                'position': {'x': -1.0, 'y': 0.0, 'z': 1.0},
-                'rotation': 90.0,
-                'horizon': 0.0
-            },
-            'targetObjectType': 'Mug',
-            'targetObjectId': 'Mug|+02.10|+00.95|+01.30',
-            'instruction': 'fetch a mug',
-            'task_type': task_type,
-            'target_position': {'x': 2.10, 'y': 0.95, 'z': 1.30}
-        },
-        {
-            'scene': 'FloorPlan11',
-            'agentPose': {
-                'position': {'x': 1.5, 'y': 0.0, 'z': -0.5},
-                'rotation': 180.0,
-                'horizon': 30.0
-            },
-            'targetObjectType': 'Book',
-            'targetObjectId': 'Book|+00.50|+01.20|+02.10',
-            'instruction': 'fetch a book',
-            'task_type': task_type,
-            'target_position': {'x': 0.50, 'y': 1.20, 'z': 2.10}
+
+        # The SPOC dataset uses house IDs as scene names
+        scene_name = episode_info["house_id"]
+
+        return {
+            'scene': scene_name,
+            'agentPose': agent_pose,
+            'targetObjectType': target_object_type,
+            'instruction': instruction,
+            'task_type': self.task_type,
+            # Placeholder, as this info is not critical for starting the task
+            'target_position': {'x': 0.0, 'y': 0.0, 'z': 0.0}, 
+            'targetObjectId': "Unknown",
         }
-    ]
-    
-    # Return episode based on index (cycle through mock data)
-    episode_idx = idx % len(mock_episodes)
-    episode = mock_episodes[episode_idx].copy()
-    
-    # Add some randomization for variety
-    random.seed(idx)
-    if task_type == "Fetch":
-        objects = ['Apple', 'Mug', 'Book', 'Cup', 'Plate', 'Fork']
-        obj_type = random.choice(objects)
-        episode['targetObjectType'] = obj_type
-        episode['instruction'] = f'fetch a {obj_type.lower()}'
-        # Randomize target position slightly
-        x_offset = random.uniform(-0.5, 0.5)
-        z_offset = random.uniform(-0.5, 0.5)
-        episode['target_position']['x'] += x_offset
-        episode['target_position']['z'] += z_offset
-        episode['targetObjectId'] = f"{obj_type}|+{episode['target_position']['x']:.2f}|+{episode['target_position']['y']:.2f}|+{episode['target_position']['z']:.2f}"
-    
-    return episode
+
+# Helper functions to be used by the environment
+_cached_datasets = {}
+
+def get_dataset(data_path: str, task_type: str, split: str) -> ChoresDataset:
+    """A caching factory for ChoresDataset."""
+    key = (data_path, task_type, split)
+    if key not in _cached_datasets:
+        print(f"Loading SPOC dataset for task '{task_type}', split '{split}'...")
+        _cached_datasets[key] = ChoresDataset(data_path, task_type, split)
+        print(f"Dataset loaded. Found {len(_cached_datasets[key])} episodes.")
+    return _cached_datasets[key]
 
 
-def load_real_chores_episode(data_dir: str, split: str, task_type: str, idx: int) -> Dict[str, Any]:
+def load_chores_episode(data_path: str, task_type: str, split: str, idx: int) -> Dict[str, Any]:
     """
-    Load a real episode from ChoresDataset (when data becomes available).
-    
-    This function will be implemented when we have access to the actual 
-    ChoresDataset files (hdf5_sensors.hdf5, etc.)
+    Loads a single episode from the ChoresDataset using the dataset class.
     
     Args:
-        data_dir: Path to ChoresDataset directory
-        split: Dataset split
-        task_type: Task type
-        idx: Episode index
+        data_path (str): The root directory of the SPOC dataset.
+        task_type (str): The specific task to load.
+        split (str): The dataset split ("train" or "val").
+        idx (int): Episode index.
         
     Returns:
-        Episode data dict
+        A dictionary containing the episode data.
     """
-    # Import heavy dependencies only when needed
-    try:
-        import h5py
-        import numpy as np
-    except ImportError as e:
-        raise ImportError(f"Missing dependency for real ChoresDataset: {e}")
-    
-    # TODO: Implement real data loading
-    # 1. Read house_id_to_sub_house_id_{split}.json
-    # 2. Load hdf5_sensors.hdf5 for the episode
-    # 3. Extract initial_agent_location, templated_task_spec, etc.
-    # 4. Convert to VAGEN format
-    
-    raise NotImplementedError("Real ChoresDataset loading not yet implemented")
+    dataset = get_dataset(data_path, task_type, split)
+    return dataset[idx]
 
 
-def get_episode_count(split: str) -> int:
+def get_episode_count(data_path: str, task_type: str, split: str) -> int:
     """
-    Get the total number of episodes in a split.
+
+    Gets the total number of episodes for a given task and split.
     
     Args:
-        split: Dataset split
+        data_path (str): The root directory of the SPOC dataset.
+        task_type (str): The specific task to load.
+        split (str): The dataset split.
         
     Returns:
-        Number of episodes
+        The number of episodes.
     """
-    # For mock data, return a fixed count
-    return 100  # TODO: Replace with actual count from dataset 
+    dataset = get_dataset(data_path, task_type, split)
+    return len(dataset) 

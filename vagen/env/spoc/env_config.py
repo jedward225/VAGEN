@@ -1,34 +1,38 @@
+from dataclasses import dataclass, field
 from vagen.env.base.base_env_config import BaseEnvConfig
-from dataclasses import dataclass, field, fields
+from typing import List, Optional
 
 @dataclass
 class SpocEnvConfig(BaseEnvConfig):
-    """Configuration class for the SPOC environment."""
+    """Configuration for the SPOC environment."""
+    
+    # === Dataset Configuration ===
+    # Path to the root of the SPOC dataset (e.g., '/path/to/fifteen_type')
+    data_path: str = "/path/to/your/spoc/dataset/fifteen_type" 
+    # Task type to load from the dataset (e.g., "FetchType", "ObjectNavType")
+    task_type: str = "FetchType"
+    # Dataset split to use
+    chores_split: str = "train" 
+
+    # === Environment Configuration ===
     env_name: str = "spoc"
-    resolution: int = 255
-    eval_set: str = 'base'
-    down_sample_ratio: float = 1.0
-    fov: int = 100
+    resolution: int = 224
+    fov: int = 90
+    step_length: float = 0.2  # Base movement step size
+    success_threshold: float = 1.0  # Distance threshold for navigation-based success
     multiview: bool = False
-    render_mode: str= 'vision'
-    max_actions_per_step: int = 5
-    max_action_penalty: float = -0.1
-    format_reward: float = 0.5
-    gpu_device: int = 0
-    prompt_format: str = "grounding_worldmodeling" 
-    success_threshold: float = 0.35  # Changed for manipulation tasks
-    step_length: float = 0.5
-    # "free_think", "no_think", "grounding", "worldmodeling", "grounding_worldmodeling"
     
-    # SPOC specific configs
-    chores_split: str = "fifteen"         # chores dataset subset
-    task_type: str = "Fetch"              # task type: Fetch, ObjectNav, etc.
+    # === Prompt and Action Configuration ===
+    prompt_format: str = "grounding_worldmodeling"
+    max_actions_per_step: int = 1
+    action_sep: str = ','
+    image_placeholder: str = "<image>"
+    special_token_list: List[str] = field(default_factory=lambda: ["<pad>", "<s>", "</s>", "<unk>", "<mask>"])
     
-    # configs for process reward for grounding and world modeling
-    max_objects_in_state: int = 5
+    # === Reward Configuration ===
+    format_reward: float = 1.0
     use_state_reward: bool = False
-    grounding_reward_weight: float = 0.5
-    worldmodeling_reward_weight: float = 0.5
+    max_objects_in_state: int = 10
 
     def config_id(self) -> str:
         """Generate a unique identifier for this configuration."""
