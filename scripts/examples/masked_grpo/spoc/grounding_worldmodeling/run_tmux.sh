@@ -49,6 +49,8 @@ mkdir -p "data/$EXPERIMENT_NAME"
 tmux new-session -d -s "$SERVER_SESSION"
 # Configure server session with conda and environment variables
 tmux send-keys -t "$SERVER_SESSION" "conda activate vagen" C-m
+# headlessly，防止 AI2-THOR 在 X11 下弹窗
+tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
 tmux send-keys -t "$SERVER_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$SERVER_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTHONHASHSEED=0" C-m
