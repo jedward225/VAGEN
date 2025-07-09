@@ -79,16 +79,21 @@ class ChoresDataset:
         with h5py.File(episode_info["hdf5_path"], 'r') as f:
             episode_group = f[episode_info["episode_key"]]
             
-            # Extract task specification to get the instruction
             # The data is stored as a 1D numpy array of uint8, representing a byte string.
             task_spec_byte_array = episode_group["templated_task_spec"][:]
             # Convert the array of integers back to a bytes object
             task_spec_bytes = task_spec_byte_array.tobytes()
-            # Decode the bytes object to a json string, stripping any potential null padding
-            task_spec_json = task_spec_bytes.decode('utf-8').strip('\x00')
 
+            # Decode into a string, then strip all leading/trailing whitespace and null chars
+            # This is a more robust way to handle padding issues in HDF5 files.
+            task_spec_json = task_spec_bytes.decode('utf-8').strip().rstrip('\x00')
+
+            # Now, load the cleaned JSON string
             task_spec = json.loads(task_spec_json)
-            instruction = task_spec["prompt"]
+
+            # --- Extract Key Information from the Task ---
+            instruction = task_spec["instruction"]
+            scene = task_spec["scene"]
             
             # Extract initial agent pose
             # last_agent_location stores pose at the *end* of each step, so index 0 is the initial pose
