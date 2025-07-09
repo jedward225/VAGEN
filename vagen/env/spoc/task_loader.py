@@ -80,7 +80,12 @@ class ChoresDataset:
             episode_group = f[episode_info["episode_key"]]
             
             # Extract task specification to get the instruction
-            task_spec_json = episode_group["templated_task_spec"][0].decode('utf-8')
+            task_spec_bytes = episode_group["templated_task_spec"][0]
+            # The loaded data might be a numpy array containing the bytes, so extract the element.
+            if isinstance(task_spec_bytes, np.ndarray):
+                task_spec_bytes = task_spec_bytes[0]
+            
+            task_spec_json = task_spec_bytes.decode('utf-8')
             task_spec = json.loads(task_spec_json)
             instruction = task_spec["prompt"]
             
