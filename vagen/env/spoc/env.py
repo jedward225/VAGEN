@@ -3,7 +3,8 @@ import ai2thor.controller
 import numpy as np
 import time
 import math
-from ai2thor.platform import CloudRendering
+# CloudRendering 平台需要官方服务器账号，大多数离线服务器无法使用。
+# 这里仅依赖 ai2thor 标准模块即可，无需显式导入 CloudRendering。
 from vagen.env.utils.context_utils import convert_numpy_to_PIL
 from vagen.env.utils.parse_utils import PARSE_FUNC_MAP
 from .env_config import SpocEnvConfig
@@ -82,10 +83,18 @@ class SpocEnv(BaseEnv):
         self.step_length = self.config.step_length
         # Environment setup
         self.resolution = config.resolution
-        # 检测是否有可用的显示环境
+        # 检测 DISPLAY 环境变量是否存在，以决定使用本地渲染还是 EGL Headless
         import os
         display_available = os.environ.get('DISPLAY') is not None
-        
+
+        # 根据是否有显示设备动态选择平台/是否 headless
+        if display_available:
+            platform_choice = "Linux64"   # 有本地 X11 的情况
+            headless_flag = False
+        else:
+            platform_choice = "EGL"       # 无显示时使用 EGL headless 渲染
+            headless_flag = True
+
         self.thor_config = {
             "agentMode": "default",
             "gridSize": 0.1,
@@ -95,12 +104,12 @@ class SpocEnv(BaseEnv):
             "width": self.resolution,
             "height": self.resolution,
             "fieldOfView": config.fov,
-            "platform": "CloudRendering" if not display_available else "Linux64",
-            "headless": False,
+            "platform": platform_choice,
+            "headless": headless_flag,
             "gpu_device": config.get('gpu_device', 0),
             "server_timeout": 300,
             "server_start_timeout": 300,
-            "quality": "Low",   # 环境暂时设置的quality很低
+            "quality": "Low",   # 初期调试使用低画质减少显存占用
         }
         
         # Initialize AI2-THOR controller with Stretch configuration
@@ -326,18 +335,24 @@ class SpocEnv(BaseEnv):
             except:
                 pass
         
-        if action_index == 1:  # moveahead - Move forward by 0.2 meter  
-            self._last_event = self.env.step(action="MoveAgent", ahead=0.2)
-        elif action_index == 2:  # moveback - Move backward by 0.2 meter
-            self._last_event = self.env.step(action="MoveAgent", ahead=-0.2)
-        elif action_index == 3:  # rotateright - Rotate right by 30 degrees
-            self._last_event = self.env.step(action="RotateAgent", degrees=30)
-        elif action_index == 4:  # rotateleft - Rotate left by 30 degrees
-            self._last_event = self.env.step(action="RotateAgent", degrees=-30)
-        elif action_index == 5:  # rotateright_small - Rotate right by 6 degrees
-            self._last_event = self.env.step(action="RotateAgent", degrees=6)
-        elif action_index == 6:  # rotateleft_small - Rotate left by 6 degrees
-            self._last_event = self.env.step(action="RotateAgent", degrees=-6)
+        # === 基础底座移动动作 ===
+        if action_index == 1:  # moveahead - 向前移动 0.2m
+            self._last_event = self.env.step(action="MoveAhead", moveMagnitude=0.2)
+        elif action_index == 2:  # moveback - 向后移动 0.2m
+            # AI2-THOR 原生支持 MoveBack 动作；若版本较旧，可用 MoveAhead+负距离替代
+            try:
+                self._last_event = self.env.step(action="MoveBack", moveMagnitude=0.2)
+            except Exception:
+                # fallback
+                self._last_event = self.env.step(action="MoveAhead", moveMagnitude=-0.2)
+        elif action_index == 3:  # rotateright - 顺时针旋转 30°
+            self._last_event = self.env.step(action="RotateRight", degrees=30)
+        elif action_index == 4:  # rotateleft - 逆时针旋转 30°
+            self._last_event = self.env.step(action="RotateLeft", degrees=30)
+        elif action_index == 5:  # rotateright_small - 顺时针旋转 6°
+            self._last_event = self.env.step(action="RotateRight", degrees=6)
+        elif action_index == 6:  # rotateleft_small - 逆时针旋转 6°
+            self._last_event = self.env.step(action="RotateLeft", degrees=6)
         elif action_index == 7:  # lookup - Deprecated for Stretch
             self._last_event = self.env.step(action="Pass")  # No-op for Stretch
         elif action_index == 8:  # lookdown - Deprecated for Stretch

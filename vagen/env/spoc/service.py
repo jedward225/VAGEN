@@ -405,4 +405,6 @@ class SpocService(BaseService):
         for env_id in env_ids:
             self.environments.pop(env_id, None)
             self.env_configs.pop(env_id, None)
-            self.device_status.pop(env_id, None)
+            # 正确地从每块 GPU 的 env 集合中移除该 env_id，而不是把 gpu 键删掉
+            for env_set in self.device_status.values():
+                env_set.discard(env_id)
