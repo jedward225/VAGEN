@@ -78,7 +78,7 @@ class SpocEnv(BaseEnv):
         # --- AI2-THOR Controller Configuration ---
         import os
         # Use EGL headless rendering if no display is available (e.g., on a server)
-        platform_choice = "EGL" if os.environ.get('DISPLAY') is None else "Linux64"
+        is_headless = os.environ.get('DISPLAY') is None
 
         self.thor_config = {
             "agentMode": "stretch",
@@ -87,8 +87,8 @@ class SpocEnv(BaseEnv):
             "width": config.resolution,
             "height": config.resolution,
             "fieldOfView": config.fov,
-            "platform": platform_choice,
-            "headless": platform_choice == "EGL",
+            "platform": "Linux64", # Always use the correct platform build name
+            "headless": is_headless, # Control headless mode with this boolean flag
             "gpu_device": config.get('gpu_device', 0),
             "server_timeout": 600, # Increased timeout for complex scenes
             "server_start_timeout": 600,
