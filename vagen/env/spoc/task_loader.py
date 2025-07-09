@@ -9,6 +9,31 @@ import glob
 import numpy as np
 from typing import Dict, Any, List
 
+# Helper function adapted from official SPOC codebase
+def json_templated_to_NL_spec(json_spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Converts a templated JSON spec into a natural language instruction."""
+    task_type = json_spec["task_type"]
+    
+    if task_type == "FetchType":
+        # Example: "go to the kitchen and get me a mug"
+        instruction = f"go to the {json_spec['recepLocation']} and get me a {json_spec['objectName']}"
+    elif task_type == "RoomVisit":
+        # Example: "go to the kitchen"
+        instruction = f"go to the {json_spec['roomName']}"
+    elif task_type == "ObjectNavType":
+        # Example: "go to the mug"
+        instruction = f"go to the {json_spec['objectName']}"
+    else:
+        # Fallback for unknown task types
+        instruction = "complete the following task"
+
+    # Add scene and initial pose for environment setup
+    json_spec['instruction'] = instruction
+    json_spec['scene'] = json_spec['scene_name']
+    json_spec['initial_pose'] = json_spec['initial_agent_pose']
+    
+    return json_spec
+
 class ChoresDataset:
     """
     A class to handle loading data from the SPOC Chores dataset,
@@ -20,176 +45,116 @@ class ChoresDataset:
 
         Args:
             data_path (str): The root directory of the downloaded SPOC dataset 
-                             (e.g., /path/to/save/dir/fifteen_type).
-            task_type (str): The specific task to load (e.g., "FetchType").
-            split (str): The dataset split, "train" or "val".
+                             (e.g., /path/to/spoc_data/fifteen_type).
+            task_type (str): The type of task to filter for (e.g., "FetchType").
+            split (str): The dataset split to use ('train', 'val', etc.).
         """
         self.data_path = data_path
         self.task_type = task_type
         self.split = split
-        self.episode_paths = self._find_episodes()
-
-        if not self.episode_paths:
-            raise FileNotFoundError(
-                f"No episodes found for task '{task_type}' in '{data_path}/{split}'. "
-                f"Please check your path and that the data is downloaded."
-            )
-
-    def _find_episodes(self) -> List[Dict[str, Any]]:
-        """Scans the data directory to find all HDF5 files and index episodes within them."""
-        search_path = os.path.join(self.data_path, self.task_type, self.split, "*", "hdf5_sensors.hdf5")
-        hdf5_files = glob.glob(search_path)
+        self.episodes = []
         
-        episode_paths = []
-        for hdf5_file in hdf5_files:
-            house_id = os.path.basename(os.path.dirname(hdf5_file))
+        print(f"Loading SPOC dataset for task '{task_type}', split '{split}'...")
+        self._find_episodes()
+        if not self.episodes:
+            raise FileNotFoundError(
+                f"No episodes found for task '{task_type}' in '{os.path.join(data_path, split)}'. "
+                "Please check your data_path and ensure the dataset is downloaded correctly."
+            )
+        print(f"Dataset loaded. Found {len(self.episodes)} episodes.")
+
+    def _find_episodes(self):
+        """Find all HDF5 files and index the episodes within them."""
+        search_path = os.path.join(self.data_path, self.split, "**", "hdf5_sensors.hdf5")
+        hdf5_files = glob.glob(search_path, recursive=True)
+        
+        for hdf5_path in hdf5_files:
             try:
-                with h5py.File(hdf5_file, 'r') as f:
-                    # Each group in the HDF5 file is an episode
+                with h5py.File(hdf5_path, 'r') as f:
                     for episode_key in f.keys():
-                        episode_paths.append({
-                            "hdf5_path": hdf5_file,
-                            "episode_key": episode_key,
-                            "house_id": house_id,
+                        # We will check the task_type inside __getitem__ after loading
+                        self.episodes.append({
+                            "hdf5_path": hdf5_path,
+                            "episode_key": episode_key
                         })
             except Exception as e:
-                print(f"Warning: Could not read {hdf5_file}. Error: {e}")
-        
-        return episode_paths
+                print(f"Warning: Could not read or process {hdf5_path}. Error: {e}")
 
     def __len__(self) -> int:
-        """Returns the total number of episodes."""
-        return len(self.episode_paths)
+        """Return the total number of episodes."""
+        return len(self.episodes)
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """
-        Loads a single episode's data from an HDF5 file.
-        
-        Args:
-            idx (int): The index of the episode to load.
-            
-        Returns:
-            A dictionary containing the initial state and task information for the episode.
+        Loads a single episode's data from the HDF5 file.
+        This now correctly interprets the SPOC data structure.
         """
-        if idx >= len(self):
-            raise IndexError("Index out of range")
-            
-        episode_info = self.episode_paths[idx]
+        episode_info = self.episodes[idx]
         
         with h5py.File(episode_info["hdf5_path"], 'r') as f:
             episode_group = f[episode_info["episode_key"]]
             
-            # The data is stored as a 1D numpy array of uint8, representing a byte string.
-            task_spec_byte_array = episode_group["templated_task_spec"][:]
-            # Convert the array of integers back to a bytes object
-            task_spec_bytes = task_spec_byte_array.tobytes()
-
-            # --- Robust JSON Extraction from padded byte string ---
-            # Decode, ignoring errors, to handle potential non-utf8 padding
+            # 1. Load the templated_task_spec as a JSON object
+            task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()
             full_str = task_spec_bytes.decode('utf-8', errors='ignore')
-            
-            # Find the start of the JSON object
             start_idx = full_str.find('{')
-            if start_idx == -1:
-                raise ValueError(f"No JSON object found in HDF5 data for episode {episode_info['episode_key']}")
-
-            # Find the matching closing brace to isolate the JSON object
             open_braces = 0
             end_idx = -1
-            for i, char in enumerate(full_str[start_idx:]):
-                if char == '{':
-                    open_braces += 1
-                elif char == '}':
-                    open_braces -= 1
-                
-                if open_braces == 0:
-                    end_idx = start_idx + i
-                    break
+            if start_idx != -1:
+                for i, char in enumerate(full_str[start_idx:]):
+                    if char == '{': open_braces += 1
+                    elif char == '}': open_braces -= 1
+                    if open_braces == 0:
+                        end_idx = start_idx + i
+                        break
             
             if end_idx == -1:
-                raise ValueError(f"Corrupted JSON in HDF5 for episode {episode_info['episode_key']} (unmatched braces)")
-
-            # Slice the string to get only the valid JSON part
-            task_spec_json = full_str[start_idx : end_idx + 1]
+                 raise ValueError(f"Corrupted JSON in episode {episode_info['episode_key']}")
             
-            # Now, load the cleaned JSON string
-            task_spec = json.loads(task_spec_json)
+            task_spec_json_str = full_str[start_idx : end_idx + 1]
+            task_spec_data = json.loads(task_spec_json_str)
 
-            # --- Extract Key Information from the Task ---
-            # Corrected the key from "instruction" to "prompt" based on SPOC's likely data schema.
-            instruction = task_spec["prompt"]
-            scene = task_spec["scene"]
+            # 2. Generate the natural language instruction and other metadata
+            processed_task_spec = json_templated_to_NL_spec(task_spec_data["extras"])
+
+            # 3. Extract the initial agent pose from the correct location
+            initial_pose_data = episode_group["last_agent_location"][0]
+            agent_pose = {
+                "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
+                "rotation": initial_pose_data[3],
+                "horizon": initial_pose_data[4],
+            }
             
-            # Extract initial agent pose
-            agent_pose_dict = task_spec["initial_pose"]
-            
-            # Extract target object info
-            target_object_type = task_spec["object_type"]
-            # The target object ID and position are not easily available at the episode level
-            # We will derive them if needed, but for now, focus on the instruction.
+            # 4. Extract target object info for success measurement
+            target_object_type = processed_task_spec.get("objectName", None)
 
-        agent_pose = {
-            "position": {"x": agent_pose_dict[0], "y": agent_pose_dict[1], "z": agent_pose_dict[2]},
-            "rotation": agent_pose_dict[3],
-            "horizon": agent_pose_dict[4],
-        }
-
-        # The SPOC dataset uses house IDs as scene names
-        scene_name = episode_info["house_id"]
-
-        return {
-            'scene': scene_name,
-            'agentPose': agent_pose,
-            'targetObjectType': target_object_type,
-            'instruction': instruction,
-            'task_type': self.task_type,
-            # Placeholder, as this info is not critical for starting the task
-            'target_position': {'x': 0.0, 'y': 0.0, 'z': 0.0}, 
-            'targetObjectId': "Unknown",
-        }
-
-# Helper functions to be used by the environment
-_cached_datasets = {}
+            return {
+                "instruction": processed_task_spec['instruction'],
+                "scene": processed_task_spec['scene'],
+                "agentPose": agent_pose,
+                "targetObjectType": target_object_type,
+            }
 
 def get_dataset(data_path: str, task_type: str, split: str) -> ChoresDataset:
-    """A caching factory for ChoresDataset."""
-    key = (data_path, task_type, split)
-    if key not in _cached_datasets:
-        print(f"Loading SPOC dataset for task '{task_type}', split '{split}'...")
-        _cached_datasets[key] = ChoresDataset(data_path, task_type, split)
-        print(f"Dataset loaded. Found {len(_cached_datasets[key])} episodes.")
-    return _cached_datasets[key]
+    """Factory function to get the dataset instance."""
+    return ChoresDataset(data_path, task_type, split)
 
-
-def load_chores_episode(data_path: str, task_type: str, split: str, idx: int) -> Dict[str, Any]:
-    """
-    Loads a single episode from the ChoresDataset using the dataset class.
-    
-    Args:
-        data_path (str): The root directory of the SPOC dataset.
-        task_type (str): The specific task to load.
-        split (str): The dataset split ("train" or "val").
-        idx (int): Episode index.
+if __name__ == '__main__':
+    # Example for debugging the loader itself
+    import os
+    SPOC_DATA_PATH = os.environ.get("SPOC_DATA_PATH")
+    if not SPOC_DATA_PATH:
+        raise ValueError("Please set the SPOC_DATA_PATH environment variable.")
         
-    Returns:
-        A dictionary containing the episode data.
-    """
-    dataset = get_dataset(data_path, task_type, split)
-    return dataset[idx]
-
-
-def get_episode_count(data_path: str, task_type: str, split: str) -> int:
-    """
-
-    Gets the total number of episodes for a given task and split.
+    dataset = get_dataset(SPOC_DATA_PATH, "FetchType", "train")
+    print(f"Successfully loaded dataset with {len(dataset)} episodes.")
     
-    Args:
-        data_path (str): The root directory of the SPOC dataset.
-        task_type (str): The specific task to load.
-        split (str): The dataset split.
-        
-    Returns:
-        The number of episodes.
-    """
-    dataset = get_dataset(data_path, task_type, split)
-    return len(dataset) 
+    # Test loading a single item
+    if len(dataset) > 0:
+        sample_item = dataset[0]
+        print("\n--- Sample Item ---")
+        print(f"Instruction: {sample_item['instruction']}")
+        print(f"Scene: {sample_item['scene']}")
+        print(f"Agent Pose: {sample_item['agentPose']}")
+        print(f"Target Object: {sample_item['targetObjectType']}")
+        print("-------------------\n") 
