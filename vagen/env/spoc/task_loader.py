@@ -84,20 +84,44 @@ class ChoresDataset:
             # Convert the array of integers back to a bytes object
             task_spec_bytes = task_spec_byte_array.tobytes()
 
-            # Decode into a string, then strip all leading/trailing whitespace and null chars
-            # This is a more robust way to handle padding issues in HDF5 files.
-            task_spec_json = task_spec_bytes.decode('utf-8').strip().rstrip('\x00')
+            # --- Robust JSON Extraction from padded byte string ---
+            # Decode, ignoring errors, to handle potential non-utf8 padding
+            full_str = task_spec_bytes.decode('utf-8', errors='ignore')
+            
+            # Find the start of the JSON object
+            start_idx = full_str.find('{')
+            if start_idx == -1:
+                raise ValueError(f"No JSON object found in HDF5 data for episode {episode_info['episode_key']}")
 
+            # Find the matching closing brace to isolate the JSON object
+            open_braces = 0
+            end_idx = -1
+            for i, char in enumerate(full_str[start_idx:]):
+                if char == '{':
+                    open_braces += 1
+                elif char == '}':
+                    open_braces -= 1
+                
+                if open_braces == 0:
+                    end_idx = start_idx + i
+                    break
+            
+            if end_idx == -1:
+                raise ValueError(f"Corrupted JSON in HDF5 for episode {episode_info['episode_key']} (unmatched braces)")
+
+            # Slice the string to get only the valid JSON part
+            task_spec_json = full_str[start_idx : end_idx + 1]
+            
             # Now, load the cleaned JSON string
             task_spec = json.loads(task_spec_json)
 
             # --- Extract Key Information from the Task ---
-            instruction = task_spec["instruction"]
+            # Corrected the key from "instruction" to "prompt" based on SPOC's likely data schema.
+            instruction = task_spec["prompt"]
             scene = task_spec["scene"]
             
             # Extract initial agent pose
-            # last_agent_location stores pose at the *end* of each step, so index 0 is the initial pose
-            initial_pose_data = episode_group["last_agent_location"][0]
+            agent_pose_dict = task_spec["initial_pose"]
             
             # Extract target object info
             target_object_type = task_spec["object_type"]
@@ -105,9 +129,9 @@ class ChoresDataset:
             # We will derive them if needed, but for now, focus on the instruction.
 
         agent_pose = {
-            "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
-            "rotation": initial_pose_data[3],
-            "horizon": initial_pose_data[4],
+            "position": {"x": agent_pose_dict[0], "y": agent_pose_dict[1], "z": agent_pose_dict[2]},
+            "rotation": agent_pose_dict[3],
+            "horizon": agent_pose_dict[4],
         }
 
         # The SPOC dataset uses house IDs as scene names
