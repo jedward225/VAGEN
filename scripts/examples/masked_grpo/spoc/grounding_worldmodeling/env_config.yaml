@@ -1,71 +1,71 @@
 env1:
     env_name: spoc  
     env_config:
-        render_mode: vision
+        data_path: "/root/spoc_data/fifteen"
         prompt_format: grounding_worldmodeling
         use_state_reward: false
-        chores_split: fifteen
-        task_type: Fetch
-        success_threshold: 0.35
+        chores_split: train
+        task_type: FetchType
+        success_threshold: 1.0
         max_actions_per_step: 3
         action_sep: ","
-        resolution: 255
+        resolution: 224
         fov: 90
         step_length: 0.2
         gpu_device: 0
-    train_size: 5000  
+    train_size: 1000  
     test_size: 128 
 
 env2:
     env_name: spoc  
     env_config:
-        render_mode: vision
+        data_path: "/root/spoc_data/fifteen"
         prompt_format: grounding_worldmodeling
         use_state_reward: false
-        chores_split: fifteen
-        task_type: Fetch
-        success_threshold: 0.35
+        chores_split: train
+        task_type: FetchType
+        success_threshold: 1.0
         max_actions_per_step: 3
         action_sep: ","
-        resolution: 255
+        resolution: 224
         fov: 90
         step_length: 0.2
         gpu_device: 1
-    train_size: 5000  
+    train_size: 1000  
     test_size: 128 
 
 env3:
     env_name: spoc  
     env_config:
-        render_mode: vision
+        data_path: "/root/spoc_data/fifteen"
         prompt_format: grounding_worldmodeling
         use_state_reward: false
-        chores_split: fifteen
-        task_type: Fetch
-        success_threshold: 0.35
+        chores_split: train
+        task_type: FetchType
+        success_threshold: 1.0
         max_actions_per_step: 3
         action_sep: ","
-        resolution: 255
+        resolution: 224
         fov: 90
         step_length: 0.2
         gpu_device: 2
-    train_size: 5000  
+    train_size: 1000  
     test_size: 128 
 
 env4:
     env_name: spoc  
     env_config:
-        render_mode: vision
+        data_path: "/root/spoc_data/fifteen"
         prompt_format: grounding_worldmodeling
         use_state_reward: false
-        chores_split: fifteen
-        task_type: Fetch
-        success_threshold: 0.35
+        chores_split: train
+        task_type: FetchType
+        success_threshold: 1.0
         max_actions_per_step: 3
         action_sep: ","
-        resolution: 255
+        resolution: 224
         fov: 90
         step_length: 0.2
         gpu_device: 3
-    train_size: 5000  
+    train_size: 1000  
     test_size: 128 

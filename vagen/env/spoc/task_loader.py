@@ -52,19 +52,38 @@ class ChoresDataset:
         print(f"Loading SPOC dataset for task '{task_type}', split '{split}'...")
         self._find_episodes()
         if not self.episodes:
-            # Correct the path in the error message to reflect what was actually searched
-            searched_path = os.path.join(data_path, self.task_type, split)
+            # Show all the paths that were searched
+            searched_paths = [
+                os.path.join(data_path, self.task_type, split),
+                os.path.join(data_path, self.task_type)
+            ]
             raise FileNotFoundError(
-                f"No episodes found for task '{task_type}' in '{searched_path}'. "
-                "Please check your data_path and ensure the dataset is downloaded correctly."
+                f"No episodes found for task '{task_type}' in any of the searched paths:\n" +
+                "\n".join([f"  - {path}" for path in searched_paths]) +
+                "\nPlease check your data_path and ensure the dataset is downloaded correctly."
             )
         print(f"Dataset loaded. Found {len(self.episodes)} episodes.")
 
     def _find_episodes(self):
         """Find all HDF5 files and index the episodes within them."""
-        # Corrected the search path to include the task_type directory
-        search_path = os.path.join(self.data_path, self.task_type, self.split, "**", "hdf5_sensors.hdf5")
-        hdf5_files = glob.glob(search_path, recursive=True)
+        # Try with split directory first, then fallback to task_type directory only
+        search_paths = [
+            os.path.join(self.data_path, self.task_type, self.split, "**", "hdf5_sensors.hdf5"),
+            os.path.join(self.data_path, self.task_type, "**", "hdf5_sensors.hdf5"),
+        ]
+        
+        hdf5_files = []
+        for search_path in search_paths:
+            found_files = glob.glob(search_path, recursive=True)
+            if found_files:
+                hdf5_files = found_files
+                print(f"Found HDF5 files using path pattern: {search_path}")
+                break
+        
+        if not hdf5_files:
+            print(f"No HDF5 files found in any of the search paths:")
+            for path in search_paths:
+                print(f"  - {path}")
         
         for hdf5_path in hdf5_files:
             try:
