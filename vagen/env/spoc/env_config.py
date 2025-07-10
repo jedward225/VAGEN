@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from vagen.env.base.base_env_config import BaseEnvConfig
 from typing import List, Optional
 
@@ -33,6 +33,9 @@ class SpocEnvConfig(BaseEnvConfig):
     format_reward: float = 1.0
     use_state_reward: bool = False
     max_objects_in_state: int = 10
+    
+    # === GPU Configuration ===
+    gpu_device: int = 0
 
     def config_id(self) -> str:
         """Generate a unique identifier for this configuration."""
