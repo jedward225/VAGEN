@@ -57,15 +57,18 @@ class ChoresDataset:
         print(f"Loading SPOC dataset for task '{task_type}', split '{split}'...")
         self._find_episodes()
         if not self.episodes:
+            # Correct the path in the error message to reflect what was actually searched
+            searched_path = os.path.join(data_path, self.task_type, split)
             raise FileNotFoundError(
-                f"No episodes found for task '{task_type}' in '{os.path.join(data_path, split)}'. "
+                f"No episodes found for task '{task_type}' in '{searched_path}'. "
                 "Please check your data_path and ensure the dataset is downloaded correctly."
             )
         print(f"Dataset loaded. Found {len(self.episodes)} episodes.")
 
     def _find_episodes(self):
         """Find all HDF5 files and index the episodes within them."""
-        search_path = os.path.join(self.data_path, self.split, "**", "hdf5_sensors.hdf5")
+        # Corrected the search path to include the task_type directory
+        search_path = os.path.join(self.data_path, self.task_type, self.split, "**", "hdf5_sensors.hdf5")
         hdf5_files = glob.glob(search_path, recursive=True)
         
         for hdf5_path in hdf5_files:
