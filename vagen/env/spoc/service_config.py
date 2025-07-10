@@ -13,3 +13,5 @@ class SpocServiceConfig(BaseServiceConfig):
     max_workers: int = 48
     # Lists the GPU devices to be used for the SPOC environments
     devices: List[int] = field(default_factory=lambda: [0, 1, 2, 3])
+    # Whether to use state reward functionality
+    use_state_reward: bool = False

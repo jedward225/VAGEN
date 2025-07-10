@@ -77,22 +77,20 @@ class SpocEnv(BaseEnv):
         
         # --- AI2-THOR Controller Configuration ---
         import os
-        # Use EGL headless rendering if no display is available (e.g., on a server)
-        is_headless = os.environ.get('DISPLAY') is None
+        # Force headless mode for server environments
+        is_headless = True  # Always use headless mode
         
         # Set environment variables for headless mode before creating controller
-        if is_headless:
-            # Clean up environment for headless mode
-            env_vars_to_set = {
-                'DISPLAY': '',
-                'XAUTHORITY': '',
-                'XDG_RUNTIME_DIR': '/tmp',
-                'GALLIUM_DRIVER': 'softpipe',
-                'MESA_GL_VERSION_OVERRIDE': '3.3',
-                'LIBGL_ALWAYS_SOFTWARE': '1'
-            }
-            for key, value in env_vars_to_set.items():
-                os.environ[key] = value
+        env_vars_to_set = {
+            'DISPLAY': '',
+            'XAUTHORITY': '',
+            'XDG_RUNTIME_DIR': '/tmp',
+            'GALLIUM_DRIVER': 'softpipe',
+            'MESA_GL_VERSION_OVERRIDE': '3.3',
+            'LIBGL_ALWAYS_SOFTWARE': '1'
+        }
+        for key, value in env_vars_to_set.items():
+            os.environ[key] = value
 
         self.thor_config = {
             "agentMode": "stretch",
@@ -101,14 +99,14 @@ class SpocEnv(BaseEnv):
             "width": config.resolution,
             "height": config.resolution,
             "fieldOfView": config.fov,
-            "platform": "Linux64", # Always use the correct platform build name
-            "headless": is_headless, # Control headless mode with this boolean flag
-            "gpu_device": getattr(config, 'gpu_device', 0),
+            "platform": "CloudRendering",  # Use CloudRendering for headless mode
+            "headless": True,  # Force headless mode
             "server_timeout": 600, # Increased timeout for complex scenes
             "server_start_timeout": 600,
             "quality": "Low",
             "gridSize": 0.1,
             "visibilityDistance": 10,
+            "x_display": None,  # Explicitly disable X display
         }
         
         self.env = ai2thor.controller.Controller(**self.thor_config)
