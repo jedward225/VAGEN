@@ -57,6 +57,7 @@ tmux send-keys -t "$SERVER_SESSION" "export PYTHONHASHSEED=0" C-m
 tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-m
 tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
+tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
 # Start the server
 tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT" C-m
 
@@ -78,6 +79,7 @@ tmux send-keys -t "$TRAIN_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_siz
 tmux send-keys -t "$TRAIN_SESSION" "export NCCL_P2P_DISABLE=1" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export NCCL_IB_DISABLE=1" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export MASTER_PORT=29500" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
 tmux send-keys -t "$TRAIN_SESSION" "set -x" C-m
 
 # First create the dataset

@@ -103,7 +103,7 @@ class SpocEnv(BaseEnv):
             "fieldOfView": config.fov,
             "platform": "Linux64", # Always use the correct platform build name
             "headless": is_headless, # Control headless mode with this boolean flag
-            "gpu_device": config.get('gpu_device', 0),
+            "gpu_device": getattr(config, 'gpu_device', 0),
             "server_timeout": 600, # Increased timeout for complex scenes
             "server_start_timeout": 600,
             "quality": "Low",
@@ -209,9 +209,9 @@ class SpocEnv(BaseEnv):
         # Process the LLM response to extract actions
         rst = self.parse_func(
             response=action_str,
-            special_token_list=self.config.get('special_token_list', None),
-            action_sep=self.config.get('action_sep', ',') or ',',
-            max_actions=self.config.get('max_actions_per_step', 1) or 1
+            special_token_list=getattr(self.config, 'special_token_list', None),
+            action_sep=getattr(self.config, 'action_sep', ',') or ',',
+            max_actions=getattr(self.config, 'max_actions_per_step', 1) or 1
         )
         
         action_list = rst['actions']
@@ -382,7 +382,7 @@ class SpocEnv(BaseEnv):
 
     def _render(self, init_obs=True):
         """Render the environment observation, including the REAL image."""
-        img_placeholder = self.config.get("image_placeholder", "<image>")
+        img_placeholder = getattr(self.config, "image_placeholder", "<image>")
         
         format_prompt_text = self.format_prompt_func(
             max_actions_per_step=self.config.max_actions_per_step,
