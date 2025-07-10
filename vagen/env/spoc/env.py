@@ -79,6 +79,20 @@ class SpocEnv(BaseEnv):
         import os
         # Use EGL headless rendering if no display is available (e.g., on a server)
         is_headless = os.environ.get('DISPLAY') is None
+        
+        # Set environment variables for headless mode before creating controller
+        if is_headless:
+            # Clean up environment for headless mode
+            env_vars_to_set = {
+                'DISPLAY': '',
+                'XAUTHORITY': '',
+                'XDG_RUNTIME_DIR': '/tmp',
+                'GALLIUM_DRIVER': 'softpipe',
+                'MESA_GL_VERSION_OVERRIDE': '3.3',
+                'LIBGL_ALWAYS_SOFTWARE': '1'
+            }
+            for key, value in env_vars_to_set.items():
+                os.environ[key] = value
 
         self.thor_config = {
             "agentMode": "stretch",
@@ -196,8 +210,8 @@ class SpocEnv(BaseEnv):
         rst = self.parse_func(
             response=action_str,
             special_token_list=self.config.get('special_token_list', None),
-            action_sep=self.config.get('action_sep', ','),
-            max_actions=self.config.get('max_actions_per_step', 1)
+            action_sep=self.config.get('action_sep', ',') or ',',
+            max_actions=self.config.get('max_actions_per_step', 1) or 1
         )
         
         action_list = rst['actions']
@@ -322,7 +336,7 @@ class SpocEnv(BaseEnv):
         
         try:
             # Check if we are holding the correct object type
-            if self.is_holding:
+            if self.is_holding and self.episode_data:
                 held_objects = self.env.last_event.metadata['arm']['heldObjects']
                 target_type = self.episode_data.get("targetObjectType")
                 if held_objects and target_type:
@@ -339,7 +353,7 @@ class SpocEnv(BaseEnv):
 
         # For compatibility, also return distance, though it's not the primary metric
         agent_pos = self.env.last_event.metadata["agent"]["position"]
-        target_pos = self.episode_data.get("target_position", agent_pos) # Use agent pos if no target
+        target_pos = self.episode_data.get("target_position", agent_pos) if self.episode_data else agent_pos
         distance = math.sqrt(
             (agent_pos["x"] - target_pos["x"])**2 +
             (agent_pos["z"] - target_pos["z"])**2
@@ -449,7 +463,7 @@ class SpocEnv(BaseEnv):
         agent_position = agent_metadata["position"]
         
         # Get target information from the loaded episode data
-        target_type = self.episode_data.get("targetObjectType", "unknown")
+        target_type = self.episode_data.get("targetObjectType", "unknown") if self.episode_data else "unknown"
         
         # Get visible objects
         objects = self.env.last_event.metadata["objects"]
