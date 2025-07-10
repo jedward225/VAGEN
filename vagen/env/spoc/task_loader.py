@@ -12,27 +12,22 @@ from typing import Dict, Any, List
 # Helper function adapted from official SPOC codebase
 def json_templated_to_NL_spec(json_spec: Dict[str, Any]) -> Dict[str, Any]:
     """Converts a templated JSON spec into a natural language instruction."""
-    task_type = json_spec["task_type"]
+    task_type = json_spec.get("task_type", "UnknownTask")
+    extras = json_spec.get("extras", {}) # Use .get for safety
     
+    instruction = "complete the following task" # Default
     if task_type == "FetchType":
-        # Example: "go to the kitchen and get me a mug"
-        instruction = f"go to the {json_spec['recepLocation']} and get me a {json_spec['objectName']}"
+        instruction = f"go to the {extras.get('recepLocation', 'unknown location')} and get me a {extras.get('objectName', 'unknown object')}"
     elif task_type == "RoomVisit":
-        # Example: "go to the kitchen"
-        instruction = f"go to the {json_spec['roomName']}"
+        instruction = f"go to the {extras.get('roomName', 'unknown room')}"
     elif task_type == "ObjectNavType":
-        # Example: "go to the mug"
-        instruction = f"go to the {json_spec['objectName']}"
-    else:
-        # Fallback for unknown task types
-        instruction = "complete the following task"
+        instruction = f"go to the {extras.get('objectName', 'unknown object')}"
 
-    # Add scene and initial pose for environment setup
-    json_spec['instruction'] = instruction
-    json_spec['scene'] = json_spec['scene_name']
-    json_spec['initial_pose'] = json_spec['initial_agent_pose']
-    
-    return json_spec
+    return {
+        'instruction': instruction,
+        'scene': extras.get('scene_name', 'FloorPlan1'), # Default scene if not found
+        'objectName': extras.get('objectName') 
+    }
 
 class ChoresDataset:
     """
@@ -118,7 +113,8 @@ class ChoresDataset:
             task_spec_data = json.loads(task_spec_json_str)
 
             # 2. Generate the natural language instruction and other metadata
-            processed_task_spec = json_templated_to_NL_spec(task_spec_data["extras"])
+            # Pass the entire spec, not just 'extras'
+            processed_task_spec = json_templated_to_NL_spec(task_spec_data)
 
             # 3. Extract the initial agent pose from the correct location
             initial_pose_data = episode_group["last_agent_location"][0]
