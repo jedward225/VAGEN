@@ -135,6 +135,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.temperature=0.7 \\
     critic.optim.lr=1e-5 \\
     critic.model.use_remove_padding=True \\
+    data.val_batch_size=4 \\
     critic.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
     critic.model.enable_gradient_checkpointing=True \\
     critic.ppo_micro_batch_size_per_gpu=1 \\
