@@ -123,12 +123,14 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=4 \\
     actor_rollout_ref.rollout.name=vllm \\
     actor_rollout_ref.rollout.gpu_memory_utilization=0.25 \\
-    actor_rollout_ref.rollout.max_num_seqs=8 \\
-    actor_rollout_ref.rollout.max_num_batched_tokens=3600 \\
+    actor_rollout_ref.rollout.max_num_seqs=4 \\
+    actor_rollout_ref.rollout.max_num_batched_tokens=2400 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
     actor_rollout_ref.rollout.free_cache_engine=True \\
     actor_rollout_ref.rollout.n=1 \\
+    actor_rollout_ref.rollout.max_tokens=200 \\
+    actor_rollout_ref.rollout.min_tokens=5 \\
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.ref.fsdp_config.param_offload=True \\
     actor_rollout_ref.rollout.top_p=0.9 \\
@@ -158,7 +160,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.use_gae_mask=True \\
     rollout_manager.n_gpus_per_node=4 \\
     trainer.val_before_train=True \\
-    trainer.val_generations_to_log_to_wandb=8 \\
+    trainer.val_generations_to_log_to_wandb=16 \\
     rollout_manager.n_trajectory=1 \\
     rollout_manager.use_service=True \\
     rollout_manager.timeout=3000 \\

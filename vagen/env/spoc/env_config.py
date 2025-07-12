@@ -16,6 +16,7 @@ class SpocEnvConfig(BaseEnvConfig):
 
     # === Environment Configuration ===
     env_name: str = "spoc"
+    render_mode: str = "vision"  # "vision" or "text" 
     resolution: int = 224
     fov: int = 90
     step_length: float = 0.2  # Base movement step size
