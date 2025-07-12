@@ -80,36 +80,68 @@ class SpocEnv(BaseEnv):
         # Force headless mode for server environments
         is_headless = True  # Always use headless mode
         
-        # Set environment variables for headless mode before creating controller
+        # Enhanced environment variables for better headless mode stability
         env_vars_to_set = {
             'DISPLAY': '',
             'XAUTHORITY': '',
             'XDG_RUNTIME_DIR': '/tmp',
             'GALLIUM_DRIVER': 'softpipe',
             'MESA_GL_VERSION_OVERRIDE': '3.3',
-            'LIBGL_ALWAYS_SOFTWARE': '1'
+            'LIBGL_ALWAYS_SOFTWARE': '1',
+            'LIBGL_ALWAYS_INDIRECT': '1',
+            'EGL_PLATFORM': 'surfaceless',
+            'PYOPENGL_PLATFORM': 'egl',
         }
         for key, value in env_vars_to_set.items():
             os.environ[key] = value
 
+        # Try different platform configurations based on server environment
+        platform_configs = [
+            {"platform": "CloudRendering", "headless": True},
+            {"platform": "Linux64", "headless": True, "x_display": "0.0"},
+            {"platform": "OSXIntel64", "headless": True} if os.name == 'posix' else None
+        ]
+        
+        # Filter out None configurations
+        platform_configs = [config for config in platform_configs if config is not None]
+        
         self.thor_config = {
             "agentMode": "stretch",
             "renderInstanceSegmentation": True,
-            "renderDepthImage": True,
+            "renderDepthImage": False,  # Disable depth to reduce memory usage
             "width": config.resolution,
             "height": config.resolution,
             "fieldOfView": config.fov,
-            "platform": "CloudRendering",  # Use CloudRendering for headless mode
-            "headless": True,  # Force headless mode
-            "server_timeout": 600, # Increased timeout for complex scenes
-            "server_start_timeout": 600,
+            "server_timeout": 1000,  # Increased timeout for server environments
+            "server_start_timeout": 900,
             "quality": "Low",
             "gridSize": 0.1,
             "visibilityDistance": 10,
-            "x_display": None,  # Explicitly disable X display
+            "commit_id": "9462dac10dc91df8057e0a65fb7c61558f3b1093",  # Stable AI2-THOR version
         }
         
-        self.env = ai2thor.controller.Controller(**self.thor_config)
+        # Try platform configurations in order of preference
+        self.env = None
+        for platform_config in platform_configs:
+            try:
+                config_to_try = {**self.thor_config, **platform_config}
+                print(f"Attempting AI2-THOR with platform: {platform_config['platform']}")
+                self.env = ai2thor.controller.Controller(**config_to_try)
+                print(f"Successfully initialized AI2-THOR with platform: {platform_config['platform']}")
+                self.thor_config = config_to_try  # Save the working configuration
+                break
+            except Exception as e:
+                print(f"Failed to initialize with platform {platform_config['platform']}: {e}")
+                if self.env:
+                    try:
+                        self.env.stop()
+                    except:
+                        pass
+                    self.env = None
+        
+        if self.env is None:
+            raise RuntimeError("Failed to initialize AI2-THOR with any platform configuration. "
+                             "Please check that AI2-THOR is properly installed and the server environment supports headless rendering.")
         
         # --- Dataset Loading ---
         self.dataset = get_dataset(

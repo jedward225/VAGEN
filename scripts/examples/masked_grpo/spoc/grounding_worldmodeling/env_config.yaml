@@ -30,7 +30,7 @@ env2:
         resolution: 224
         fov: 90
         step_length: 0.2
-        gpu_device: 1
+        gpu_device: 0
     train_size: 1000  
     test_size: 128 
 
@@ -48,7 +48,7 @@ env3:
         resolution: 224
         fov: 90
         step_length: 0.2
-        gpu_device: 2
+        gpu_device: 0
     train_size: 1000  
     test_size: 128 
 
@@ -66,6 +66,6 @@ env4:
         resolution: 224
         fov: 90
         step_length: 0.2
-        gpu_device: 3
+        gpu_device: 0
     train_size: 1000  
     test_size: 128 
