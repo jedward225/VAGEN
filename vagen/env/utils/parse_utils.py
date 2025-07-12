@@ -229,25 +229,39 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
     - actions: a list of actions extracted from action_content
     - format_correct: whether the response strictly follows the expected format
     """
+    # DEBUG: Add detailed logging for SPOC debugging
+    print(f"[DEBUG PARSE] Raw response (first 500 chars): {response[:500]}...")
+    print(f"[DEBUG PARSE] Response length: {len(response)} chars")
+    
     response = response.replace("<image>","")
     # Pattern to check for content strictly in the expected format
     strict_pattern = r'^\s*<think>\s*<observation>(.*?)</observation>\s*<reasoning>(.*?)</reasoning>\s*<prediction>(.*?)</prediction>\s*</think>\s*<answer>(.*?)</answer>\s*$'
     strict_match = re.match(strict_pattern, response.strip(), re.DOTALL)
     format_correct = strict_match is not None
     
+    print(f"[DEBUG PARSE] Strict format check: {format_correct}")
+    
     # Pattern to extract content from tags
     extraction_pattern = r'<think>\s*<observation>(.*?)</observation>\s*<reasoning>(.*?)</reasoning>\s*<prediction>(.*?)</prediction>\s*</think>\s*<answer>(.*?)</answer>'
     match = re.search(extraction_pattern, response, re.DOTALL)
     
+    print(f"[DEBUG PARSE] Extraction match found: {match is not None}")
+    
     if not match:
         observation_content, reasoning_content, prediction_content, action_content, actions = "", "", "", "", []
         think_content = ""
+        print("[DEBUG PARSE] No match found - returning empty content")
     else:
         observation_content = match.group(1)
         reasoning_content = match.group(2)
         prediction_content = match.group(3)
         action_content = match.group(4)
         think_content = "<observation>" + observation_content + "</observation><reasoning>" + reasoning_content + "</reasoning><prediction>" + prediction_content + "</prediction>"
+        
+        print(f"[DEBUG PARSE] Extracted observation: {observation_content[:100]}...")
+        print(f"[DEBUG PARSE] Extracted reasoning: {reasoning_content[:100]}...")
+        print(f"[DEBUG PARSE] Extracted prediction: {prediction_content[:100]}...")
+        print(f"[DEBUG PARSE] Extracted action_content: {action_content}")
         
         if special_token_list is not None:
             for special_token in special_token_list:
@@ -258,14 +272,17 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
                 think_content = think_content.replace(special_token, "").strip()
                 
         actions = [action.strip() for action in action_content.split(action_sep) if action.strip()]
+        print(f"[DEBUG PARSE] Parsed actions: {actions}")
+        
         if len(actions) > max_actions:
             actions = actions[:max_actions]
             action_content = (" " + action_sep + " ").join(actions)
+            print(f"[DEBUG PARSE] Truncated to max_actions: {actions}")
     
     # Reconstruct the cleaned llm_response
     llm_response = "<think>" + think_content.strip() + "</think>" + "<answer>" + action_content.strip() + "</answer>"
     
-    return {
+    result = {
         "llm_raw_response": response,
         "llm_response": llm_response,
         "observation_content": observation_content,
@@ -276,6 +293,11 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
         "actions": actions,
         "format_correct": format_correct
     }
+    
+    print(f"[DEBUG PARSE] Final result: format_correct={format_correct}, actions={actions}")
+    print("[DEBUG PARSE] ================================")
+    
+    return result
     
 PARSE_FUNC_MAP = {
     "free_think": parse_freethink,

@@ -664,16 +664,32 @@ class QwenVLRolloutManagerService():
         Returns:
             Dictionary containing the recording of all environments
         """
+        print("[DEBUG ROLLOUT] ===== recording_to_log() called =====")
+        
         env_info = []
         reward_rst=self.env_client.compute_reward_batch(list(self.envs.keys()))
+        
+        print(f"[DEBUG ROLLOUT] Processing {len(self.recorder)} environments")
+        
         for env_id, record in self.recorder.items():
+            print(f"[DEBUG ROLLOUT] Processing env_id: {env_id}")
+            
             config_id = self.envs[env_id].config_id()
             step= self.env_states[env_id]['step']
+            
+            print(f"[DEBUG ROLLOUT] Config ID: {config_id}")
+            print(f"[DEBUG ROLLOUT] Step count: {step}")
+            
             output_rst = self._single_recording_to_prompt(record, self.env_states[env_id]['step'], window_size=None, is_final=False)
             image= output_rst['image_data']
             done = self.env_states[env_id]['done']
             score = reward_rst[env_id]+ sum(output_rst['rewards'])
             
+            print(f"[DEBUG ROLLOUT] Output prompt length: {len(output_rst.get('prompt', ''))}")
+            print(f"[DEBUG ROLLOUT] Output prompt preview: {output_rst.get('prompt', '')[:200]}...")
+            print(f"[DEBUG ROLLOUT] Image data: {len(image) if image else 0} images")
+            print(f"[DEBUG ROLLOUT] Score: {score}")
+            print(f"[DEBUG ROLLOUT] Done: {done}")
             
             metrics={
                 "score": score,
@@ -687,13 +703,24 @@ class QwenVLRolloutManagerService():
             traj_metrics=self.env_states[env_id]['metrics']['traj_metrics']
             metrics.update(turn_metrics)
             metrics.update(traj_metrics)
-            env_info.append({
+            
+            print(f"[DEBUG ROLLOUT] Turn metrics: {turn_metrics}")
+            print(f"[DEBUG ROLLOUT] Traj metrics: {traj_metrics}")
+            
+            env_entry = {
                 "env_id": env_id,
                 "config_id": config_id,
                 "output_str": output_rst['prompt'],
                 "image_data": image,
                 "metrics": metrics,
-            })
+            }
+            
+            env_info.append(env_entry)
+            print(f"[DEBUG ROLLOUT] Added env entry with config_id: {config_id}")
+        
+        print(f"[DEBUG ROLLOUT] Total env_info entries: {len(env_info)}")
+        print("[DEBUG ROLLOUT] ===== recording_to_log() finished =====")
+        
         return env_info
             
             

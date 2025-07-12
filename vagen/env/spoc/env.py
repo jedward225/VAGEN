@@ -237,12 +237,20 @@ class SpocEnv(BaseEnv):
             Observation, reward, done, info
         """
         # Process the LLM response to extract actions
+        print(f"[DEBUG SPOC] ===== Starting step() with action_str =====")
+        print(f"[DEBUG SPOC] Raw LLM response: {action_str}")
+        print(f"[DEBUG SPOC] Response length: {len(action_str)} chars")
+        
         rst = self.parse_func(
             response=action_str,
             special_token_list=getattr(self.config, 'special_token_list', None),
             action_sep=getattr(self.config, 'action_sep', ',') or ',',
             max_actions=getattr(self.config, 'max_actions_per_step', 1) or 1
         )
+        
+        print(f"[DEBUG SPOC] Parse result: {rst}")
+        print(f"[DEBUG SPOC] Format correct: {rst.get('format_correct', False)}")
+        print(f"[DEBUG SPOC] Actions extracted: {rst.get('actions', [])}")
         
         action_list = rst['actions']
         prev_pos = self.env.last_event.metadata["agent"]["position"]
@@ -268,12 +276,19 @@ class SpocEnv(BaseEnv):
             
             
         # Execute valid actions
+        print(f"[DEBUG SPOC] action_is_valid: {metrics['turn_metrics']['action_is_valid']}")
+        print(f"[DEBUG SPOC] format_correct: {rst.get('format_correct', True)}")
+        
         if metrics["turn_metrics"]["action_is_valid"] and rst.get("format_correct", True):
+            print(f"[DEBUG SPOC] Executing {len(action_list)} actions: {action_list}")
             
-            for action in action_list:
+            for i, action in enumerate(action_list):
                 action_lower = action.lower()
+                print(f"[DEBUG SPOC] Processing action {i+1}/{len(action_list)}: '{action}' -> '{action_lower}'")
+                
                 if action_lower in self.ACTION_LOOKUP:
                     action_int = self.ACTION_LOOKUP[action_lower]
+                    print(f"[DEBUG SPOC] Valid action found: {action_lower} -> {action_int}")
                     self._execute_action(action_int)
                     success, distance = self.measure_success()
                     
@@ -282,12 +297,15 @@ class SpocEnv(BaseEnv):
                         self.reward += 10.0  # Success reward
                         done = True
                         metrics['traj_metrics']['success'] = True
+                        print(f"[DEBUG SPOC] SUCCESS! Task completed with action: {action_lower}")
                     
                     self.valid_actions.append(action)
                     
                     if done:
                         break
                 else:
+                    print(f"[DEBUG SPOC] INVALID ACTION: '{action_lower}' not in ACTION_LOOKUP")
+                    print(f"[DEBUG SPOC] Available actions: {list(self.ACTION_LOOKUP.keys())}")
                     metrics['turn_metrics']['action_is_valid'] = False
                     break
                 
@@ -295,6 +313,8 @@ class SpocEnv(BaseEnv):
                 if self._current_step >= self._max_episode_steps:
                     done = True
                     break
+        else:
+            print(f"[DEBUG SPOC] SKIPPING action execution - invalid format or no valid actions")
         
         if metrics['turn_metrics']['action_is_valid'] and rst.get("format_correct", True):
             self.reward += self.config.format_reward
