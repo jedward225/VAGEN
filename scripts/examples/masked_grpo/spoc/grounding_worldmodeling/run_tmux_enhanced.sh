@@ -12,7 +12,7 @@ read -p "Enter CUDA devices (default: 0,1,2,3): " CUDA_DEVICES
 CUDA_DEVICES=${CUDA_DEVICES:-0,1,2,3}
 
 # Get the directory of the script
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}\" )" && pwd )"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 EXPERIMENT_NAME=$(echo $SCRIPT_DIR | rev | cut -d'/' -f1-3 | rev | tr '/' '-')
 
 # Enhanced environment setup for headless AI2-THOR
