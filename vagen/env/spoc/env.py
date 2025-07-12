@@ -105,6 +105,7 @@ class SpocEnv(BaseEnv):
         # Filter out None configurations
         platform_configs = [config for config in platform_configs if config is not None]
         
+        # 使用默认 build，避免因为特定 commit_id 在 Linux64 缺少构建而初始化失败
         self.thor_config = {
             "agentMode": "stretch",
             "renderInstanceSegmentation": True,
@@ -117,25 +118,45 @@ class SpocEnv(BaseEnv):
             "quality": "Low",
             "gridSize": 0.1,
             "visibilityDistance": 10,
-            "commit_id": "9462dac10dc91df8057e0a65fb7c61558f3b1093",  # Stable AI2-THOR version
+            # NOTE: 不再显式指定 commit_id，让 ai2thor 自动选择匹配平台的最新 build
         }
-        
-        # Try platform configurations in order of preference
+
+        # 确保 self.env 在异常路径下始终定义，避免 AttributeError
         self.env = None
+        
+        try:
+            from ai2thor.platform import Platform  # ai2thor>=5.x
+        except ImportError:
+            Platform = None  # 老版本 ai2thor 无此枚举
+
         for platform_config in platform_configs:
             try:
+                # 将字符串平台转换为 Platform 枚举，保持向后兼容
+                if isinstance(platform_config.get("platform"), str):
+                    if Platform is not None:
+                        try:
+                            platform_enum = Platform[platform_config["platform"]]
+                            platform_config["platform"] = platform_enum
+                        except KeyError:
+                            print(f"[SpocEnv] Unknown platform string '{platform_config['platform']}', fallback to default")
+                            platform_config.pop("platform", None)
+                    else:
+                        # 当前 ai2thor 版本无 Platform 枚举，直接去掉 platform 字段
+                        platform_config.pop("platform", None)
+
                 config_to_try = {**self.thor_config, **platform_config}
-                print(f"Attempting AI2-THOR with platform: {platform_config['platform']}")
+                platform_name = platform_config.get("platform", "default")
+                print(f"Attempting AI2-THOR with platform: {platform_name}")
                 self.env = ai2thor.controller.Controller(**config_to_try)
-                print(f"Successfully initialized AI2-THOR with platform: {platform_config['platform']}")
+                print(f"Successfully initialized AI2-THOR with platform: {platform_name}")
                 self.thor_config = config_to_try  # Save the working configuration
                 break
             except Exception as e:
-                print(f"Failed to initialize with platform {platform_config['platform']}: {e}")
+                print(f"Failed to initialize with platform {platform_config.get('platform', 'default')}: {e}")
                 if self.env:
                     try:
                         self.env.stop()
-                    except:
+                    except Exception:
                         pass
                     self.env = None
         

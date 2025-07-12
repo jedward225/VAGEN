@@ -47,6 +47,15 @@ class SpocService(BaseService):
                     return env_id, None, f"Expected environment type 'navigation', got '{env_name}'"
                 
                 env_config_dict = config['env_config']
+                # -------- 数据路径健壮性处理 --------------
+                # 如果 data_path 不存在但环境变量 SPOC_DATA_PATH 可用，则自动回退
+                import os
+                if ('data_path' not in env_config_dict or not os.path.exists(env_config_dict.get('data_path',''))) \
+                        and os.environ.get('SPOC_DATA_PATH'):
+                    fallback_path = os.environ['SPOC_DATA_PATH']
+                    print(f"[SpocService] data_path '{env_config_dict.get('data_path')}' 不存在，自动回退到环境变量 SPOC_DATA_PATH={fallback_path}")
+                    env_config_dict['data_path'] = fallback_path
+
                 env_config = SpocEnvConfig(**env_config_dict)
                 env = SpocEnv(env_config)
                 return env_id, (env, env_config), None
