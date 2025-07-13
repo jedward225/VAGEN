@@ -104,14 +104,24 @@ class ChoresDataset:
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """
         Loads a single episode's data from the HDF5 file.
-        This now correctly interprets the SPOC data structure.
+        This final version correctly constructs the scene_name from 'house_index'.
         """
         episode_info = self.episodes[idx]
         
         with h5py.File(episode_info["hdf5_path"], 'r') as f:
             episode_group = f[episode_info["episode_key"]]
+            # 1. Read the house_index (it's usually a single-element array)
+            try:
+                house_index = episode_group['house_index'][0]
+            except KeyError:
+                print(f"FATAL: 'house_index' key not found for episode {episode_info['episode_key']}. Cannot determine scene.")
+                # Returning a dummy that will likely fail, to avoid a hard crash
+                house_index = 0 
             
-            # 1. Load the templated_task_spec as a JSON object
+            # 2. Construct the correct scene name string from the index
+            scene_name = f"FloorPlan{house_index + 1}"
+
+            # 3. Load and process the task spec JSON to get the instruction
             task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()
             full_str = task_spec_bytes.decode('utf-8', errors='ignore')
             start_idx = full_str.find('{')
@@ -126,16 +136,13 @@ class ChoresDataset:
                         break
             
             if end_idx == -1:
-                 raise ValueError(f"Corrupted JSON in episode {episode_info['episode_key']}")
+                raise ValueError(f"Corrupted JSON in episode {episode_info['episode_key']}")
             
             task_spec_json_str = full_str[start_idx : end_idx + 1]
             task_spec_data = json.loads(task_spec_json_str)
-
-            # 2. Generate the natural language instruction and other metadata
-            # Pass the entire spec, not just 'extras'
             processed_task_spec = json_templated_to_NL_spec(task_spec_data)
-
-            # 3. Extract the initial agent pose from the correct location
+            
+            # 4. Extract the initial agent pose
             initial_pose_data = episode_group["last_agent_location"][0]
             agent_pose = {
                 "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
@@ -143,12 +150,13 @@ class ChoresDataset:
                 "horizon": initial_pose_data[4],
             }
             
-            # 4. Extract target object info for success measurement
+            # 5. Extract target object info
             target_object_type = processed_task_spec.get("objectName", None)
 
+            # 6. Assemble the final, CORRECT data dictionary
             return {
                 "instruction": processed_task_spec['instruction'],
-                "scene": processed_task_spec['scene'],
+                "scene": scene_name,  # <-- Use the correctly constructed scene_name
                 "agentPose": agent_pose,
                 "targetObjectType": target_object_type,
             }

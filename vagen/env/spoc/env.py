@@ -4,6 +4,7 @@ import numpy as np
 import time
 import math
 import os
+import time
 
 from vagen.env.utils.context_utils import convert_numpy_to_PIL
 from vagen.env.utils.parse_utils import PARSE_FUNC_MAP
@@ -179,25 +180,41 @@ class SpocEnv(BaseEnv):
 
         # Reset the AI2-THOR scene
         scene_name = traj_data["scene"]
-        try:
-            self._last_event = self.env.reset(scene=scene_name)
-            if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
-                raise RuntimeError(f"Failed to reset to scene {scene_name}. AI2-THOR controller returned failure.")
-            
-            pose = traj_data["agentPose"]
-            self._last_event = self.env.step(
-                action="Teleport",
-                position=pose["position"],
-                rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
-                horizon=pose["horizon"],
-                standing=True
-            )
-            if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
-                raise RuntimeError(f"Failed to teleport agent in scene {scene_name}. AI2-THOR controller returned failure.")
+        max_retries = 3
+        reset_success = False
+        for attempt in range(max_retries):
+            try:
+                # Step 1: Reset the AI2-THOR scene
+                self._last_event = self.env.reset(scene=scene_name)
+                if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
+                    raise RuntimeError(f"Attempt {attempt + 1}: Failed to reset to scene {scene_name}.")
+                
+                # Step 2: Teleport the agent to the starting pose
+                pose = traj_data["agentPose"]
+                self._last_event = self.env.step(
+                    action="Teleport",
+                    position=pose["position"],
+                    rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
+                    horizon=pose["horizon"],
+                    standing=True
+                )
+                if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
+                    raise RuntimeError(f"Attempt {attempt + 1}: Failed to teleport agent in scene {scene_name}.")
 
-        except Exception as e:
-            print(f"Error resetting to scene {scene_name}: {e}. Trying again...")
-            raise RuntimeError(f"Unrecoverable error in SpocEnv.reset: {e}") from e
+                # If both steps succeed, mark as successful and break the loop
+                reset_success = True
+                break
+
+            except Exception as e:
+                print(f"Warning: SpocEnv.reset failed on attempt {attempt + 1}/{max_retries} for scene '{scene_name}'. Error: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)  # Wait for 2 seconds before retrying
+                else:
+                    # If all retries fail, DO NOT raise an error.
+                    # Instead, print a critical warning and try to reset with a NEW random episode.
+                    print(f"CRITICAL: Scene '{scene_name}' seems to be broken or has invalid coordinates. "
+                        f"Skipping this episode and trying a new one.")
+                    return self.reset(seed=None)  # Recursively call reset to get a new valid episode
 
         # Reset episode tracking information
         self._current_step = 0
@@ -238,9 +255,9 @@ class SpocEnv(BaseEnv):
             max_actions=getattr(self.config, 'max_actions_per_step', 1) or 1
         )
         
-        print(f"[DEBUG SPOC] Parse result: {rst}")
-        print(f"[DEBUG SPOC] Format correct: {rst.get('format_correct', False)}")
-        print(f"[DEBUG SPOC] Actions extracted: {rst.get('actions', [])}")
+        # print(f"[DEBUG SPOC] Parse result: {rst}")
+        # print(f"[DEBUG SPOC] Format correct: {rst.get('format_correct', False)}")
+        # print(f"[DEBUG SPOC] Actions extracted: {rst.get('actions', [])}")
         
         action_list = rst['actions']
         prev_pos = self.env.last_event.metadata["agent"]["position"]

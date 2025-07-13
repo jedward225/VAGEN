@@ -59,8 +59,9 @@ tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" 
 tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
 tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
 # Start the server
-# tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT" C-m
-tmux send-keys -t "$SERVER_SESSION" "xvfb-run -a python -m vagen.server.server server.port=$PORT > server.log 2>&1" C-m
+# headlessly, prevent AI2-THOR from using a display, which is critical for CloudRendering
+tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
+tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT > server.log 2>&1" C-m
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
