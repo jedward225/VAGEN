@@ -3,8 +3,8 @@ import ai2thor.controller
 import numpy as np
 import time
 import math
-# CloudRendering 平台需要官方服务器账号，大多数离线服务器无法使用。
-# 这里仅依赖 ai2thor 标准模块即可，无需显式导入 CloudRendering。
+import os
+
 from vagen.env.utils.context_utils import convert_numpy_to_PIL
 from vagen.env.utils.parse_utils import PARSE_FUNC_MAP
 from .env_config import SpocEnvConfig
@@ -75,11 +75,6 @@ class SpocEnv(BaseEnv):
         super().__init__()
         self.config = config
         
-        # --- AI2-THOR Controller Configuration ---
-        import os
-        # Force headless mode for server environments
-        is_headless = True  # Always use headless mode
-        
         # Enhanced environment variables for better headless mode stability
         env_vars_to_set = {
             'DISPLAY': '',
@@ -108,25 +103,24 @@ class SpocEnv(BaseEnv):
         # 使用默认 build，避免因为特定 commit_id 在 Linux64 缺少构建而初始化失败
         self.thor_config = {
             "agentMode": "stretch",
-            "renderInstanceSegmentation": True,
+            "gridSize": 0.1,
+            "visibilityDistance": 10,
             "renderDepthImage": False,  # Disable depth to reduce memory usage
+            "renderInstanceSegmentation": False,
             "width": config.resolution,
             "height": config.resolution,
             "fieldOfView": config.fov,
-            "server_timeout": 1000,  # Increased timeout for server environments
+            "server_timeout": 900, 
             "server_start_timeout": 900,
-            "quality": "Low",
-            "gridSize": 0.1,
-            "visibilityDistance": 10,
-            # NOTE: 不再显式指定 commit_id，让 ai2thor 自动选择匹配平台的最新 build
+            "quality": "Low",    
         }
 
-        # 确保 self.env 在异常路径下始终定义，避免 AttributeError
         self.env = None
         
         try:
             from ai2thor.platform import Platform  # ai2thor>=5.x
         except ImportError:
+            print(f"[SpocEnv] Failed to import ai2thor.platform")
             Platform = None  # 老版本 ai2thor 无此枚举
 
         for platform_config in platform_configs:
@@ -170,6 +164,7 @@ class SpocEnv(BaseEnv):
             task_type=config.task_type, 
             split=config.chores_split
         )
+        print(f"[SpocEnv] Loaded {len(self.dataset)} episodes")
         self.number_of_episodes = len(self.dataset)
         
         # --- Episode State Tracking ---
