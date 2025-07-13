@@ -49,8 +49,8 @@ mkdir -p "data/$EXPERIMENT_NAME"
 tmux new-session -d -s "$SERVER_SESSION"
 # Configure server session with conda and environment variables
 tmux send-keys -t "$SERVER_SESSION" "conda activate vagen" C-m
-# headlessly，防止 AI2-THOR 在 X11 下弹窗
-tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
+# headlessly，防止 AI2-THOR 在 X11 下弹窗 这个可能是val创建环境的错误来源 ↓
+# tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
 tmux send-keys -t "$SERVER_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$SERVER_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTHONHASHSEED=0" C-m
@@ -59,7 +59,8 @@ tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" 
 tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
 tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
 # Start the server
-tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT" C-m
+# tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT" C-m
+tmux send-keys -t "$SERVER_SESSION" "xvfb-run -a python -m vagen.server.server server.port=$PORT" C-m
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
@@ -124,6 +125,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.name=vllm \\
     actor_rollout_ref.rollout.gpu_memory_utilization=0.25 \\
     actor_rollout_ref.rollout.max_num_seqs=4 \\
+    actor_rollout_ref.rollout.max_model_len=90000 \\
     actor_rollout_ref.rollout.max_num_batched_tokens=2400 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
