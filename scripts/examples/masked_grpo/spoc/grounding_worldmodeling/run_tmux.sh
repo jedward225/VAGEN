@@ -105,8 +105,8 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.train_batch_size=4 \\
     data.max_prompt_length=1024 \\
     data.max_response_length=200 \\
-    data.max_trajectory_length=1200 \\
-    actor_rollout_ref.rollout.max_trajectory_length=1200 \\
+    data.max_trajectory_length=4096 \\
+    actor_rollout_ref.rollout.max_trajectory_length=4096 \\
     data.image_key=images \\
     data.truncation=left \\
     actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
@@ -126,7 +126,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.gpu_memory_utilization=0.25 \\
     actor_rollout_ref.rollout.max_num_seqs=4 \\
     actor_rollout_ref.rollout.max_model_len=90000 \\
-    actor_rollout_ref.rollout.max_num_batched_tokens=2400 \\
+    actor_rollout_ref.rollout.max_num_batched_tokens=4096 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
     actor_rollout_ref.rollout.free_cache_engine=True \\

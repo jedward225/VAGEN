@@ -252,7 +252,7 @@ class SpocEnv(BaseEnv):
         # Process the LLM response to extract actions
         print(f"[DEBUG SPOC] ===== Starting step() with action_str =====")
         print(f"[DEBUG SPOC] Raw LLM response: {action_str}")
-        print(f"[DEBUG SPOC] Response length: {len(action_str)} chars")
+        # print(f"[DEBUG SPOC] Response length: {len(action_str)} chars")
         
         rst = self.parse_func(
             response=action_str,
@@ -292,7 +292,10 @@ class SpocEnv(BaseEnv):
         print(f"[DEBUG SPOC] action_is_valid: {metrics['turn_metrics']['action_is_valid']}")
         print(f"[DEBUG SPOC] format_correct: {rst.get('format_correct', True)}")
         
-        if metrics["turn_metrics"]["action_is_valid"] and rst.get("format_correct", True):
+        if not action_list or not rst.get("format_correct", True):
+            print(f"[DEBUG SPOC] No valid actions found or format is incorrect. Executing 'Pass' action, which is actually a no-op action.")
+            self._execute_action(self.ACTION_LOOKUP['lookup'])
+        else:
             print(f"[DEBUG SPOC] Executing {len(action_list)} actions: {action_list}")
             
             for i, action in enumerate(action_list):
@@ -507,6 +510,17 @@ class SpocEnv(BaseEnv):
             "surroundings. You must output a valid action from the provided list to control the robot. "
             "Think step-by-step about how to decompose the task and select the best action."
         )
+        # spoc_system_prompt = (
+        #     "You are an AI agent controlling a Stretch robot. Your ONLY task is to output actions to complete goals."
+        #     "You MUST respond in the specified format. DO NOT generate any other text, conversation, or explanations."
+        #     "First, think step-by-step inside the <think> tag. Analyze the observation and plan your next move."
+        #     "Then, you MUST provide exactly one action from the list in the <answer> tag."
+        #     "\n\n**CRITICAL: Your response MUST strictly follow this format:**"
+        #     "\n<think>Your detailed reasoning here.</think><answer>action_name</answer>"
+        #     "\n\n**Example:**"
+        #     "\n<think>The object is to my left, so I need to rotate left to face it.</think><answer>rotateleft</answer>"
+        #     "\n\nNow, begin."
+        # )
 
         return spoc_system_prompt + '\n\n' + system_prompt(format=self.config.prompt_format) + '\n' + format_prompt_text
     
