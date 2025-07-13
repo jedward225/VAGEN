@@ -77,7 +77,7 @@ class SpocEnv(BaseEnv):
         
         # Enhanced environment variables for better headless mode stability
         env_vars_to_set = {
-            'DISPLAY': '',
+            # 'DISPLAY': '',
             'XAUTHORITY': '',
             'XDG_RUNTIME_DIR': '/tmp',
             'GALLIUM_DRIVER': 'softpipe',
@@ -117,36 +117,33 @@ class SpocEnv(BaseEnv):
 
         self.env = None
         
-        try:
-            from ai2thor.platform import Platform  # ai2thor>=5.x
-        except ImportError:
-            print(f"[SpocEnv] Failed to import ai2thor.platform")
-            Platform = None  # 老版本 ai2thor 无此枚举
+        # try:
+        #     from ai2thor.platform import Platform  # ai2thor>=5.x
+        # except ImportError:
+        #     print(f"[SpocEnv] Failed to import ai2thor.platform")
+        #     Platform = None  # 老版本 ai2thor 无此枚举
+        # 直接尝试使用 Linux64 平台字符串，这是最适合 headless 服务器的
+        # 如果需要，也可以尝试 "CloudRendering"
+        platforms_to_try = ["CloudRendering", "Linux64"] # 优先级从高到低, Linux64 平台尝试失败，CloudRendering 平台尝试成功
 
-        for platform_config in platform_configs:
+        for platform_str in platforms_to_try:
             try:
-                # 将字符串平台转换为 Platform 枚举，保持向后兼容
-                if isinstance(platform_config.get("platform"), str):
-                    if Platform is not None:
-                        try:
-                            platform_enum = Platform[platform_config["platform"]]
-                            platform_config["platform"] = platform_enum
-                        except KeyError:
-                            print(f"[SpocEnv] Unknown platform string '{platform_config['platform']}', fallback to default")
-                            platform_config.pop("platform", None)
-                    else:
-                        # 当前 ai2thor 版本无 Platform 枚举，直接去掉 platform 字段
-                        platform_config.pop("platform", None)
-
-                config_to_try = {**self.thor_config, **platform_config}
-                platform_name = platform_config.get("platform", "default")
-                print(f"Attempting AI2-THOR with platform: {platform_name}")
+                # 构造配置，直接传入 platform 字符串
+                # 注意：x_display 参数只对 Linux64 有意义，且在 xvfb-run 模式下通常由 xvfb-run 管理
+                config_to_try = {**self.thor_config, "platform": platform_str, "headless": True}
+                
+                # 如果是 Linux64 且你需要明确指定 x_display (尽管 xvfb-run 会处理)
+                # if platform_str == "Linux64":
+                #     config_to_try["x_display"] = "0.0" # 或者其他你希望 Xvfb 监听的显示号
+                                                        # 但最好由 xvfb-run 自动分配
+                
+                print(f"Attempting AI2-THOR with platform: {platform_str}")
                 self.env = ai2thor.controller.Controller(**config_to_try)
-                print(f"Successfully initialized AI2-THOR with platform: {platform_name}")
-                self.thor_config = config_to_try  # Save the working configuration
+                print(f"Successfully initialized AI2-THOR with platform: {platform_str}")
+                self.thor_config = config_to_try  # 保存成功配置
                 break
             except Exception as e:
-                print(f"Failed to initialize with platform {platform_config.get('platform', 'default')}: {e}")
+                print(f"Failed to initialize with platform {platform_str}: {e}")
                 if self.env:
                     try:
                         self.env.stop()
