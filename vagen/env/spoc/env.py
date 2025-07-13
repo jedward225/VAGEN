@@ -181,22 +181,23 @@ class SpocEnv(BaseEnv):
         scene_name = traj_data["scene"]
         try:
             self._last_event = self.env.reset(scene=scene_name)
+            if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
+                raise RuntimeError(f"Failed to reset to scene {scene_name}. AI2-THOR controller returned failure.")
+            
+            pose = traj_data["agentPose"]
+            self._last_event = self.env.step(
+                action="Teleport",
+                position=pose["position"],
+                rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
+                horizon=pose["horizon"],
+                standing=True
+            )
+            if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
+                raise RuntimeError(f"Failed to teleport agent in scene {scene_name}. AI2-THOR controller returned failure.")
+
         except Exception as e:
             print(f"Error resetting to scene {scene_name}: {e}. Trying again...")
-            self.env.stop() # Force stop and restart controller
-            self.env = ai2thor.controller.Controller(**self.thor_config)
-            self._last_event = self.env.reset(scene=scene_name)
-
-
-        # Teleport the agent to the starting position
-        pose = traj_data["agentPose"]
-        self._last_event = self.env.step(
-            action="Teleport",
-            position=pose["position"],
-            rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
-            horizon=pose["horizon"],
-            standing=True
-        )
+            raise RuntimeError(f"Unrecoverable error in SpocEnv.reset: {e}") from e
 
         # Reset episode tracking information
         self._current_step = 0
