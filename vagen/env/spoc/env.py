@@ -558,13 +558,8 @@ class SpocEnv(BaseEnv):
             "visible_objects": visible_objects[:self.config.max_objects_in_state],   
         }
 
-
-if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/liujiajun/spoc_data/fifteen_type"    first
-    # Example usage for debugging the environment
-    import os
+if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/liujiajun/spoc_data/fifteen"    first, or on the remote server, you can use "export SPOC_DATA_PATH=root/spoc_data/fifteen"
     
-    # IMPORTANT: Set this to your local SPOC dataset path
-    # Example: "/home/user/spoc_data/fifteen_type"
     SPOC_DATA_PATH = os.environ.get("SPOC_DATA_PATH") 
     if not SPOC_DATA_PATH:
         raise ValueError("Please set the SPOC_DATA_PATH environment variable to your dataset path.")
