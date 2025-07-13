@@ -90,17 +90,6 @@ class SpocEnv(BaseEnv):
         for key, value in env_vars_to_set.items():
             os.environ[key] = value
 
-        # Try different platform configurations based on server environment
-        platform_configs = [
-            {"platform": "CloudRendering", "headless": True},
-            {"platform": "Linux64", "headless": True, "x_display": "0.0"},
-            {"platform": "OSXIntel64", "headless": True} if os.name == 'posix' else None
-        ]
-        
-        # Filter out None configurations
-        platform_configs = [config for config in platform_configs if config is not None]
-        
-        # 使用默认 build，避免因为特定 commit_id 在 Linux64 缺少构建而初始化失败
         self.thor_config = {
             "agentMode": "stretch",
             "gridSize": 0.1,
@@ -117,13 +106,6 @@ class SpocEnv(BaseEnv):
 
         self.env = None
         
-        # try:
-        #     from ai2thor.platform import Platform  # ai2thor>=5.x
-        # except ImportError:
-        #     print(f"[SpocEnv] Failed to import ai2thor.platform")
-        #     Platform = None  # 老版本 ai2thor 无此枚举
-        # 直接尝试使用 Linux64 平台字符串，这是最适合 headless 服务器的
-        # 如果需要，也可以尝试 "CloudRendering"
         platforms_to_try = ["CloudRendering", "Linux64"] # 优先级从高到低, Linux64 平台尝试失败，CloudRendering 平台尝试成功
 
         for platform_str in platforms_to_try:
@@ -281,9 +263,9 @@ class SpocEnv(BaseEnv):
         self.reward = 0
         self.valid_actions = []
         done = False
+
         info = {}
         info.update(rst)
-        
         # 重要：添加llm_raw_response键，rollout_manager需要它来构建prompt
         info['llm_raw_response'] = action_str
             
@@ -292,10 +274,7 @@ class SpocEnv(BaseEnv):
         print(f"[DEBUG SPOC] action_is_valid: {metrics['turn_metrics']['action_is_valid']}")
         print(f"[DEBUG SPOC] format_correct: {rst.get('format_correct', True)}")
         
-        if not action_list or not rst.get("format_correct", True):
-            print(f"[DEBUG SPOC] No valid actions found or format is incorrect. Executing 'Pass' action, which is actually a no-op action.")
-            self._execute_action(self.ACTION_LOOKUP['lookup'])
-        else:
+        if metrics["turn_metrics"]["action_is_valid"] and rst.get("format_correct", True):
             print(f"[DEBUG SPOC] Executing {len(action_list)} actions: {action_list}")
             
             for i, action in enumerate(action_list):
