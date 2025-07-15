@@ -64,6 +64,41 @@ class ChoresDataset:
             )
         print(f"Dataset loaded. Found {len(self.episodes)} episodes.")
 
+    def _map_house_index_to_scene(self, house_index):
+        """
+        Map SPOC's house_index to AI2-THOR's supported FloorPlan scene range.
+        AI2-THOR supports: FloorPlan1-30, FloorPlan201-230, FloorPlan301-330, FloorPlan401-430
+        """
+        # Define supported ranges
+        supported_ranges = [
+            (1, 30),      # FloorPlan1-30
+            (201, 230),   # FloorPlan201-230
+            (301, 330),   # FloorPlan301-330
+            (401, 430)    # FloorPlan401-430
+        ]
+        
+        # If the house_index is already in a supported range, use it directly
+        scene_id = house_index + 1  # Convert from 0-based to 1-based
+        for start, end in supported_ranges:
+            if start <= scene_id <= end:
+                return scene_id
+        
+        # If not in supported range, map to a supported range
+        # Use modulo to cycle through supported ranges
+        total_supported = sum(end - start + 1 for start, end in supported_ranges)
+        mapped_offset = house_index % total_supported
+        
+        # Find which range this offset falls into
+        current_offset = 0
+        for start, end in supported_ranges:
+            range_size = end - start + 1
+            if current_offset <= mapped_offset < current_offset + range_size:
+                return start + (mapped_offset - current_offset)
+            current_offset += range_size
+        
+        # Fallback to FloorPlan1 if something goes wrong
+        return 1
+
     def _find_episodes(self):
         """Find all HDF5 files and index the episodes within them."""
         # Try with split directory first, then fallback to task_type directory only
@@ -119,7 +154,9 @@ class ChoresDataset:
                 house_index = 0 
             
             # 2. Construct the correct scene name string from the index
-            scene_name = f"FloorPlan{house_index + 1}"
+            # Map SPOC's large house_index to ai2thor v5.0.0's supported FloorPlan1-430 range
+            mapped_scene_index = self._map_house_index_to_scene(house_index)
+            scene_name = f"FloorPlan{mapped_scene_index}_physics"
 
             # 3. Load and process the task spec JSON to get the instruction
             task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()

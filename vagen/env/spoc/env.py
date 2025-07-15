@@ -95,14 +95,23 @@ class SpocEnv(BaseEnv):
             "agentMode": "stretch",
             "gridSize": 0.1,
             "visibilityDistance": 10,
+            "visibilityScheme": "Distance",
             "renderDepthImage": False,  # Disable depth to reduce memory usage
-            "renderInstanceSegmentation": False,
+            "renderInstanceSegmentation": True,  # Enable for SPOC compatibility
             "width": config.resolution,
             "height": config.resolution,
             "fieldOfView": config.fov,
             "server_timeout": 900, 
             "server_start_timeout": 900,
-            "quality": "Low",    
+            "quality": "Low",
+            # SPOC-specific parameters
+            "useMassThreshold": True,
+            "massThreshold": 10,
+            "autoSimulation": False,
+            "autoSyncTransforms": True,
+            "snapToGrid": False,
+            "fastActionEmit": True,
+            "cameraNearPlane": 0.01,
         }
 
         self.env = None
@@ -192,11 +201,12 @@ class SpocEnv(BaseEnv):
                 # Step 2: Teleport the agent to the starting pose
                 pose = traj_data["agentPose"]
                 self._last_event = self.env.step(
-                    action="Teleport",
+                    action="TeleportFull",
                     position=pose["position"],
                     rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
-                    horizon=pose["horizon"],
-                    standing=True
+                    horizon=0,  # Use HORIZON=0 as in SPOC
+                    standing=True,
+                    forceAction=True
                 )
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to teleport agent in scene {scene_name}.")
@@ -447,8 +457,18 @@ class SpocEnv(BaseEnv):
             add_example=False
         )
         
-        # --- FIX: Provide the actual image frame to the model ---
+        # --- Get the frame from AI2-THOR ---
         frame = self.env.last_event.frame
+        if frame is None:
+            # If frame is None, execute a Pass action to get the first frame
+            self.env.step("Pass")
+            frame = self.env.last_event.frame
+            
+        if frame is None:
+            # If still None, create a black placeholder image
+            import numpy as np
+            frame = np.zeros((self.config.resolution, self.config.resolution, 3), dtype=np.uint8)
+            
         multi_modal_data = {
             img_placeholder: [convert_numpy_to_PIL(frame)]
         }
