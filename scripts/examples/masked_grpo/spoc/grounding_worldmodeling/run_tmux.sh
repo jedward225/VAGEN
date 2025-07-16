@@ -44,6 +44,7 @@ echo "Using CUDA devices: $CUDA_DEVICES"
 
 # Create directories if they don't exist
 mkdir -p "data/$EXPERIMENT_NAME"
+mkdir -p "$SCRIPT_DIR/logs"
 
 # Create server session
 tmux new-session -d -s "$SERVER_SESSION"
@@ -63,7 +64,7 @@ tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifte
 # Start the server
 # headlessly, prevent AI2-THOR from using a display, which is critical for CloudRendering
 tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
-tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT > server.log 2>&1" C-m
+tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT > $SCRIPT_DIR/logs/server.log 2>&1" C-m
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
@@ -171,7 +172,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.use_service=True \\
     rollout_manager.timeout=3000 \\
     rollout_manager.base_url=\"http://localhost:$PORT\" \\
-    2>&1 | tee $EXPERIMENT_NAME.log" C-m
+    2>&1 | tee $SCRIPT_DIR/logs/$EXPERIMENT_NAME.log" C-m
 
 echo "-----------------------------------------"
 echo "SPOC GRPO Training Configuration Summary:"
@@ -183,6 +184,14 @@ echo "Training Session: $TRAIN_SESSION"
 echo "Environment: SPOC (Stretch robot manipulation)"
 echo "Task Type: Fetch"
 echo "Prompt Format: grounding_worldmodeling"
+echo "-----------------------------------------"
+echo "LOG FILE LOCATIONS:"
+echo "Server log: $SCRIPT_DIR/logs/server.log"
+echo "Training log: $SCRIPT_DIR/logs/$EXPERIMENT_NAME.log"
+echo ""
+echo "To monitor logs in real-time:"
+echo "Server: tail -f $SCRIPT_DIR/logs/server.log"
+echo "Training: tail -f $SCRIPT_DIR/logs/$EXPERIMENT_NAME.log"
 echo "-----------------------------------------"
 echo "To attach to server session: tmux attach-session -t $SERVER_SESSION"
 echo "To attach to training session: tmux attach-session -t $TRAIN_SESSION"
