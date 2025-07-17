@@ -21,6 +21,19 @@ def test_dataset_creation():
         # Import the create_dataset function
         from vagen.env.create_dataset import create_dataset_from_yaml
         
+        # Check registered environments
+        from vagen.env import REGISTERED_ENV
+        print(f"Registered environments: {list(REGISTERED_ENV.keys())}")
+        
+        # Try to import SPOC explicitly
+        try:
+            from vagen.env.spoc import SpocEnv, SpocEnvConfig, SpocService, SpocServiceConfig
+            print("SPOC import successful")
+        except Exception as e:
+            print(f"SPOC import failed: {e}")
+            import traceback
+            traceback.print_exc()
+        
         yaml_path = os.path.join(BASE_PATH, 'scripts/examples/masked_grpo/spoc/grounding_worldmodeling/env_config.yaml')
         train_path = '/tmp/test_train.parquet'
         test_path = '/tmp/test_test.parquet'
