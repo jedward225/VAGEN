@@ -580,7 +580,7 @@ class SpocEnv(BaseEnv):
             "visible_objects": visible_objects[:self.config.max_objects_in_state],   
         }
 
-if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/liujiajun/spoc_data/fifteen"    first, or on the remote server, you can use "export SPOC_DATA_PATH=root/spoc_data/fifteen"
+if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/jiajunliu/spoc_data/fifteen"    first, or on the remote server, you can use "export SPOC_DATA_PATH=root/spoc_data/fifteen"
     
     SPOC_DATA_PATH = os.environ.get("SPOC_DATA_PATH") 
     if not SPOC_DATA_PATH:
