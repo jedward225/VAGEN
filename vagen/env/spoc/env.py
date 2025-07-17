@@ -86,7 +86,8 @@ class SpocEnv(BaseEnv):
             'LIBGL_ALWAYS_SOFTWARE': '1',
             'LIBGL_ALWAYS_INDIRECT': '1',
             'EGL_PLATFORM': 'surfaceless',
-            'PYOPENGL_PLATFORM': 'egl',
+            'PYOPENGL_PLATFORM': 'osmesa',  # Try OSMesa instead of EGL
+            'MESA_NO_ERROR': '1',
         }
         for key, value in env_vars_to_set.items():
             os.environ[key] = value
