@@ -115,7 +115,16 @@ class SpocEnv(BaseEnv):
         }
 
         self.env = None
-        platforms_to_try = ["CloudRendering", "Linux64"] # 优先级从高到低, Linux64 平台尝试失败，CloudRendering 平台尝试成功
+        # Try different platform configurations
+        platforms_to_try = []
+        
+        # Check if we're in a headless environment
+        if not os.environ.get('DISPLAY'):
+            # Headless mode - try CloudRendering first
+            platforms_to_try.extend(["CloudRendering", "Linux64"])
+        else:
+            # Display available - try Linux64 first
+            platforms_to_try.extend(["Linux64", "CloudRendering"])
 
         for platform_str in platforms_to_try:
             try:
