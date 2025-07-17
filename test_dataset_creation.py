@@ -4,20 +4,24 @@ Test dataset creation for SPOC environment
 """
 import os
 import sys
-sys.path.insert(0, '/home/jiajunliu/VAGEN')
+
+# Detect base path automatically
+BASE_PATH = '/root/VAGEN' if os.path.exists('/root/VAGEN') else '/home/jiajunliu/VAGEN'
+sys.path.insert(0, BASE_PATH)
 
 # Set environment variables
-os.environ['PYTHONPATH'] = '/home/jiajunliu/VAGEN:' + os.environ.get('PYTHONPATH', '')
-os.environ['SPOC_DATA_PATH'] = '/home/jiajunliu/spoc_data/fifteen'
+os.environ['PYTHONPATH'] = BASE_PATH + ':' + os.environ.get('PYTHONPATH', '')
+os.environ['SPOC_DATA_PATH'] = '/root/spoc_data/fifteen' if os.path.exists('/root/spoc_data/fifteen') else '/home/jiajunliu/spoc_data/fifteen'
 
 def test_dataset_creation():
     try:
         print("Testing dataset creation...")
+        print(f"Base path: {BASE_PATH}")
         
         # Import the create_dataset function
         from vagen.env.create_dataset import create_dataset_from_yaml
         
-        yaml_path = '/home/jiajunliu/VAGEN/scripts/examples/masked_grpo/spoc/grounding_worldmodeling/env_config.yaml'
+        yaml_path = os.path.join(BASE_PATH, 'scripts/examples/masked_grpo/spoc/grounding_worldmodeling/env_config.yaml')
         train_path = '/tmp/test_train.parquet'
         test_path = '/tmp/test_test.parquet'
         
