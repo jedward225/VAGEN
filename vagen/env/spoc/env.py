@@ -251,7 +251,28 @@ class SpocEnv(BaseEnv):
         self.valid_actions = []
         self.reward = 0
         
-        return self._render(init_obs=True), {}
+        # Initialize info dict with metrics for consistency
+        info = {
+            "metrics": {
+                "turn_metrics": {
+                    "action_is_valid": False,
+                    "action_is_effective": False,
+                },
+                "traj_metrics": {
+                    "success": False,
+                }
+            },
+            "env_feedback": "Environment reset successfully.",
+            "is_format_rewarded": False,
+            "distance": 0.0,
+            "instruction": self.episode_language_instruction,
+            "env_step": 0,
+            "episode_elapsed_seconds": 0.0,
+            "task_success": False,
+            "last_action_success": True,
+            "llm_raw_response": ""
+        }
+        return self._render(init_obs=True), info
     
     @env_state_reward_wrapper
     def step(self, action_str: str):
