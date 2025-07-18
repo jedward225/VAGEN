@@ -9,9 +9,9 @@ env1:
         success_threshold: 1.0
         max_actions_per_step: 3
         action_sep: ","
-        resolution: 224
+        resolution: 512
         fov: 90
         step_length: 0.2
         gpu_device: 0
     train_size: 100  
-    test_size: 5 
+    test_size: 1 
