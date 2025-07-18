@@ -39,27 +39,27 @@ def system_prompt(**kwargs):
         example=f"""Example:
 Round 1:
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think>Navigation camera shows I'm in a kitchen with the target coffee mug on the counter ahead. Manipulation camera shows the counter edge but mug is not in range yet. My arm is retracted. I need to navigate closer to get the mug within manipulation range.</think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think>Good, I'm now closer to the counter. The navigation camera shows the mug is directly ahead. Manipulation camera shows the mug is now visible and within reach. I need to extend my arm out to reach the mug position.</think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <think>Perfect! My arm is extended and I've successfully grasped the mug. Navigation camera shows I'm holding the target object. Manipulation camera confirms the mug is securely in my gripper. Task completed successfully.</think>
 <answer>Done - mug retrieved</answer>
@@ -69,27 +69,27 @@ Env_feedback: Success"""
         example=f"""Example:
 Round 1:
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><observation>Navigation camera: I am in a kitchen environment. There is a counter ahead with the target coffee mug visible on its surface. Manipulation camera: I can see the counter edge but the mug is not yet within my manipulation range. Arm state: My arm is fully retracted (z=0.0m, y=0.8m), wrist is at neutral position (0°), and gripper is empty.</observation><reasoning>I need to navigate closer to the counter to bring the mug within my manipulation range. Moving forward will position me optimally for the pick-up task.</reasoning></think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><observation>Navigation camera: I am now positioned closer to the counter with the mug clearly visible ahead. Manipulation camera: The mug is now prominently displayed in my manipulation view and appears to be within reach. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at 0°, gripper ready for action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action.</reasoning></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <think><observation>Navigation camera: I am still positioned at the counter, and I can see that I am now holding the target mug. Manipulation camera: The mug is securely grasped in my gripper and clearly visible. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>I have successfully retrieved the target object. The task has been completed as the mug is now in my possession.</reasoning></think>
 <answer>Task completed - mug retrieved</answer>
@@ -99,27 +99,27 @@ Env_feedback: Success"""
         example=f"""Example:
 Round 1:
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><reasoning>I can see the target coffee mug on the counter through my navigation camera. It's positioned ahead of me but not yet within my manipulation range. My arm is currently retracted and I need to get closer to the counter for successful manipulation.</reasoning><prediction>Navigation camera: I will be standing closer to the counter with the mug clearly visible and accessible. Manipulation camera: The mug will be prominently displayed in my manipulation view, positioned optimally for grasping. Arm state: My arm will remain retracted (z=0.0m, y=0.8m) but I'll be in position to extend it toward the mug.</prediction></think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><reasoning>Perfect positioning achieved. The mug is now clearly visible in both cameras and within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to grasp it.</reasoning><prediction>Navigation camera: I will maintain my position at the counter while holding the mug. Manipulation camera: The mug will be securely grasped and visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper.</prediction></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <think><reasoning>Excellent! I have successfully grasped the target mug. My arm is properly extended and the gripper has secured the object. The task objective has been achieved.</reasoning><prediction>Task completed successfully. I will maintain my current position with the mug securely held, ready for any subsequent instructions or task completion confirmation.</prediction></think>
 <answer>Task completed - mug retrieved</answer>
@@ -129,27 +129,27 @@ Env_feedback: Success"""
         example=f"""Example:
 Round 1:
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><observation>Navigation camera: I am in a kitchen environment with a counter directly ahead. The target coffee mug is visible on the counter surface. Manipulation camera: I can see the counter edge in my manipulation view, but the mug is not yet within my manipulation range. Arm state: My arm is fully retracted (z=0.0m, y=0.8m), wrist is at neutral position (0°), and gripper is empty and ready.</observation><reasoning>I need to navigate closer to the counter to bring the mug within my manipulation range. Moving forward will position me optimally for the subsequent manipulation actions.</reasoning><prediction>Navigation camera: I will be standing closer to the counter with the mug clearly visible and accessible. Manipulation camera: The mug will be prominently displayed in my manipulation view, positioned optimally for arm extension and grasping. Arm state: My arm will remain retracted but I'll be in optimal position to extend toward the mug.</prediction></think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><observation>Navigation camera: I am now positioned optimally at the counter with the mug clearly visible ahead. Manipulation camera: The mug is now prominently displayed in my manipulation view and appears to be within reach of my arm. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at neutral position (0°), gripper empty and ready for pickup action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to secure the object.</reasoning><prediction>Navigation camera: I will maintain my position at the counter while successfully holding the target mug. Manipulation camera: The mug will be securely grasped and clearly visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper, task completed.</prediction></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <think><observation>Navigation camera: I am positioned at the counter and successfully holding the target coffee mug as intended. Manipulation camera: The mug is securely grasped in my gripper and clearly visible, confirming successful task completion. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>Perfect! I have successfully completed the manipulation task. The target object is now securely in my possession, fulfilling the task requirements.</reasoning><prediction>Task completed successfully. I will maintain this position with the mug securely held, ready for task completion confirmation or any subsequent instructions.</prediction></think>
 <answer>Task completed - mug successfully retrieved</answer>
@@ -159,25 +159,25 @@ Env_feedback: Success"""
         example=f"""Example:
 Round 1:
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
 Navigation Camera:
-<image>
+[Navigation view showing environment]
 Manipulation Camera:
-<image>
+[Manipulation view showing close-up]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <answer>Task completed</answer>
 Round 4:
@@ -253,9 +253,9 @@ def init_observation_template(**kwargs):
     
     return f"""[Initial Observation]:
 Navigation Camera:
-{observation}
+<image>
 Manipulation Camera:
-{observation}
+<image>
 Arm State: {arm_state}
 Human Instruction: {instruction}
 Decide your next action(s)."""
@@ -275,9 +275,9 @@ reward: {reward}
 done: {done}
 After that, the observation is:
 Navigation Camera:
-{observation}
+<image>
 Manipulation Camera:
-{observation}
+<image>
 Arm State: {arm_state}
 Human Instruction: {instruction}
 Decide your next action(s)."""
