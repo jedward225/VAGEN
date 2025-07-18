@@ -79,6 +79,23 @@ tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$
 echo "Waiting for server to start on port $PORT..."
 sleep 15  # Give more time for SPOC environment initialization
 
+# Check if server is actually running
+echo "Checking server health..."
+for i in {1..10}; do
+    if curl -s "http://localhost:$PORT/health" > /dev/null 2>&1; then
+        echo "✓ Server is running and healthy"
+        break
+    else
+        echo "Server not ready yet, waiting... (attempt $i/10)"
+        sleep 2
+    fi
+    if [ $i -eq 10 ]; then
+        echo "✗ Error: Server failed to start after 30 seconds"
+        echo "Check server logs: tail -f $SCRIPT_DIR/logs/server.log"
+        exit 1
+    fi
+done
+
 # Create training session
 tmux new-session -d -s "$TRAIN_SESSION"
 # Configure training session with conda and environment variables
@@ -214,13 +231,13 @@ echo "- GPU memory utilization: 0.25 (optimized for 4 GPU setup)"
 echo "- Train batch size: 4 (scaled for quad GPU)"
 echo "- PPO mini batch size: 4 (scaled for quad GPU)"
 echo "- Trajectory count: 1 (每 GPU 单环境，减小验证并发)"
-echo "- Max trajectory length: 1200 (足以覆盖长 prompt)"
+echo "- Max trajectory length: 4096 (足以覆盖长 prompt)"
 echo "- Max response length: 200 (rollout 再限 256，上限靠 max_response_length 控制)"
-echo "- Max num seqs: 8, Max batched tokens: 3600 (scaled for 4 GPU)"
+echo "- Max num seqs: 4, Max batched tokens: 4096 (scaled for 4 GPU)"
 echo "- Enforce eager mode: True (no CUDA graphs)"
 echo "- Free cache engine: True (release memory)"
 echo "- FSDP parameter/optimizer offloading enabled for memory efficiency"
 echo "- Ray resource management optimized for container environment"
 echo "- PyTorch CUDA allocator optimized (max_split_size_mb=128)"
-echo "- Validation frequency延长至 200 step 以减少验证开销"
-echo "- Increased timeout to 600s for Stretch robot interactions" 
+echo "- Validation frequency设置为 20 step 以平衡验证开销"
+echo "- Increased timeout to 3000s for Stretch robot interactions" 
