@@ -1,0 +1,56 @@
+=== 检查环境变量 ===
+MESA_GL_VERSION_OVERRIDE=
+LIBGL_ALWAYS_SOFTWARE=
+EGL_PLATFORM=
+GALLIUM_DRIVER=
+DISPLAY=
+SPOC_DATA_PATH=
+
+=== 检查 vulkaninfo ===
+PATH=/root/miniconda3/envs/vagen/bin:/root/miniconda3/condabin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+/usr/bin/vulkaninfo
+WARNING: [Loader Message] Code 0 : terminator_CreateInstance: Failed to CreateInstance in ICD 5.  Skipping ICD.
+'DISPLAY' environment variable not set... skipping surface info
+error: XDG_RUNTIME_DIR not set in the environment.
+error: XDG_RUNTIME_DIR not set in the environment.
+error: XDG_RUNTIME_DIR not set in the environment.
+
+=== 检查 fake vulkaninfo 是否存在 ===
+-rwxr-xr-x 1 root root 196 Jul 18 05:36 /root/bin/vulkaninfo
+
+=== 检查 OpenGL ===
+Error: unable to open display 
+
+=== 检查数据路径 ===
+total 0
+drwxr-xr-x 5 root root  58 Jul 18 01:08 .
+drwxr-xr-x 3 root root  21 Jul 17 02:23 ..
+drwxr-xr-x 4 root root 149 Jul 18 01:25 FetchType
+drwxr-xr-x 4 root root 149 Jul 17 02:28 PickupType
+drwxr-xr-x 2 root root   6 Jul 17 02:28 RoomVisit
+
+=== 设置环境变量并测试 ===
+
+=== 重新检查环境变量 ===
+MESA_GL_VERSION_OVERRIDE=3.3
+LIBGL_ALWAYS_SOFTWARE=1
+vulkaninfo 输出:
+Fake vulkaninfo
+Vulkan Instance Version: 1.2.170
+
+Devices:
+========
+GPU0:
+    deviceUUID = cc0a9986-229c-fdb6-d361-b0c69aab1d62
+
+=== 测试 Python 导入 ===
+Python 环境变量:
+  MESA_GL_VERSION_OVERRIDE=3.3
+  LIBGL_ALWAYS_SOFTWARE=1
+  EGL_PLATFORM=surfaceless
+  GALLIUM_DRIVER=llvmpipe
+  DISPLAY=NOT SET
+
+AI2-THOR 导入成功
+
+=== 完成 ===

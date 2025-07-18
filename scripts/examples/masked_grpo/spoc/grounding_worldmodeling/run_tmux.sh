@@ -65,28 +65,28 @@ tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-
 tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
 tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
-# Create fake vulkaninfo for AI2-THOR
-tmux send-keys -t "$SERVER_SESSION" "mkdir -p ~/bin && echo '#!/bin/bash' > ~/bin/vulkaninfo && echo 'echo \"Fake vulkaninfo\"' >> ~/bin/vulkaninfo && echo 'exit 0' >> ~/bin/vulkaninfo && chmod +x ~/bin/vulkaninfo" C-m
+# Create fake vulkaninfo for AI2-THOR - dynamically get GPU UUID
+tmux send-keys -t "$SERVER_SESSION" "mkdir -p ~/bin" C-m
+tmux send-keys -t "$SERVER_SESSION" "GPU_UUID=\$(nvidia-smi --query-gpu=gpu_uuid --format=csv,noheader | head -1 | sed 's/GPU-//')" C-m
+tmux send-keys -t "$SERVER_SESSION" "cat > ~/bin/vulkaninfo << EOF
+#!/bin/bash
+echo \"Fake vulkaninfo\"
+echo \"Vulkan Instance Version: 1.2.170\"
+echo \"\"
+echo \"Devices:\"
+echo \"========\"
+echo \"GPU0:\"
+echo \"    deviceUUID = \$GPU_UUID\"
+exit 0
+EOF" C-m
+tmux send-keys -t "$SERVER_SESSION" "chmod +x ~/bin/vulkaninfo" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PATH=~/bin:\$PATH" C-m
 # Start the server
 # headlessly, prevent AI2-THOR from using a display, which is critical for CloudRendering
 tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
 
-# 验证关键环境变量
-tmux send-keys -t "$SERVER_SESSION" "echo '=== 验证环境变量 ==='" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'MESA_GL_VERSION_OVERRIDE='\$MESA_GL_VERSION_OVERRIDE" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'LIBGL_ALWAYS_SOFTWARE='\$LIBGL_ALWAYS_SOFTWARE" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'EGL_PLATFORM='\$EGL_PLATFORM" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'GALLIUM_DRIVER='\$GALLIUM_DRIVER" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'DISPLAY='\$DISPLAY" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'SPOC_DATA_PATH='\$SPOC_DATA_PATH" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo 'PATH='\$PATH" C-m
-tmux send-keys -t "$SERVER_SESSION" "which vulkaninfo && vulkaninfo" C-m
-tmux send-keys -t "$SERVER_SESSION" "echo '=================='" C-m
-
-# 启动服务器（使用 tee 同时显示和记录日志）
-tmux send-keys -t "$SERVER_SESSION" "echo '启动服务器...'" C-m
-tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT 2>&1 | tee $SCRIPT_DIR/logs/server.log" C-m
+# 验证关键环境变量并启动服务器（全部在一个命令中执行）
+tmux send-keys -t "$SERVER_SESSION" "(echo '=== 验证环境变量 ==='; echo 'MESA_GL_VERSION_OVERRIDE='\$MESA_GL_VERSION_OVERRIDE; echo 'LIBGL_ALWAYS_SOFTWARE='\$LIBGL_ALWAYS_SOFTWARE; echo 'EGL_PLATFORM='\$EGL_PLATFORM; echo 'GALLIUM_DRIVER='\$GALLIUM_DRIVER; echo 'DISPLAY='\$DISPLAY; echo 'SPOC_DATA_PATH='\$SPOC_DATA_PATH; echo 'PATH='\$PATH; which vulkaninfo && vulkaninfo; echo '=================='; echo '启动服务器...'; python -m vagen.server.server server.port=$PORT) 2>&1 | tee $SCRIPT_DIR/logs/server.log" C-m
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
