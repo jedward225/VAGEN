@@ -485,8 +485,13 @@ class SpocEnv(BaseEnv):
             import numpy as np
             frame = np.zeros((self.config.resolution, self.config.resolution, 3), dtype=np.uint8)
             
+        # Convert frame to PIL Image
+        pil_image = convert_numpy_to_PIL(frame)
+        
+        # For dual camera setup, use the same image for both cameras
+        # In a real dual camera setup, you would get two different frames
         multi_modal_data = {
-            img_placeholder: [convert_numpy_to_PIL(frame)]
+            img_placeholder: [pil_image, pil_image]  # Two identical images for now
         }
         
         # Get current arm state
