@@ -65,20 +65,24 @@ tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-
 tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
 tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
-# Create fake vulkaninfo for AI2-THOR - dynamically get GPU UUID
+# Create fake vulkaninfo for AI2-THOR - dynamically get ALL GPU UUIDs
 tmux send-keys -t "$SERVER_SESSION" "mkdir -p ~/bin" C-m
-tmux send-keys -t "$SERVER_SESSION" "GPU_UUID=\$(nvidia-smi --query-gpu=gpu_uuid --format=csv,noheader | head -1 | sed 's/GPU-//')" C-m
-tmux send-keys -t "$SERVER_SESSION" "cat > ~/bin/vulkaninfo << EOF
+tmux send-keys -t "$SERVER_SESSION" "cat > ~/bin/vulkaninfo << 'OUTER_EOF'
 #!/bin/bash
 echo \"Fake vulkaninfo\"
 echo \"Vulkan Instance Version: 1.2.170\"
 echo \"\"
 echo \"Devices:\"
 echo \"========\"
-echo \"GPU0:\"
-echo \"    deviceUUID = \$GPU_UUID\"
+gpu_count=0
+nvidia-smi --query-gpu=gpu_uuid --format=csv,noheader | while read uuid; do
+    clean_uuid=\$(echo \$uuid | sed 's/GPU-//')
+    echo \"GPU\$gpu_count:\"
+    echo \"    deviceUUID = \$clean_uuid\"
+    gpu_count=\$((gpu_count+1))
+done
 exit 0
-EOF" C-m
+OUTER_EOF" C-m
 tmux send-keys -t "$SERVER_SESSION" "chmod +x ~/bin/vulkaninfo" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PATH=~/bin:\$PATH" C-m
 # Start the server
