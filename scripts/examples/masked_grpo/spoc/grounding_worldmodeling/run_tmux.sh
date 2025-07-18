@@ -49,9 +49,15 @@ mkdir -p "$SCRIPT_DIR/logs"
 # Create server session
 tmux new-session -d -s "$SERVER_SESSION"
 # Configure server session with conda and environment variables
+tmux send-keys -t "$SERVER_SESSION" "cd /root/VAGEN" C-m
 tmux send-keys -t "$SERVER_SESSION" "conda activate vagen" C-m
 # Add VAGEN root to PYTHONPATH
 tmux send-keys -t "$SERVER_SESSION" "export PYTHONPATH=/root/VAGEN:\$PYTHONPATH" C-m
+# Set Mesa environment variables for headless rendering
+tmux send-keys -t "$SERVER_SESSION" "export MESA_GL_VERSION_OVERRIDE=3.3" C-m
+tmux send-keys -t "$SERVER_SESSION" "export LIBGL_ALWAYS_SOFTWARE=1" C-m
+tmux send-keys -t "$SERVER_SESSION" "export EGL_PLATFORM=surfaceless" C-m
+tmux send-keys -t "$SERVER_SESSION" "export GALLIUM_DRIVER=llvmpipe" C-m
 # headlessly，防止 AI2-THOR 在 X11 下弹窗 这个可能是val创建环境的错误来源 ↓
 # tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
 tmux send-keys -t "$SERVER_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
