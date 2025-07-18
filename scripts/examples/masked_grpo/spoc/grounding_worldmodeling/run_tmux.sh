@@ -1,7 +1,6 @@
 #!/bin/bash
-set -e  # Exit immediately if a command exits with a non-zero status
+set -e
 
-# Interactive input for port and CUDA devices
 read -p "Enter port number (default: 5000): " PORT_INPUT
 PORT=${PORT_INPUT:-5000}
 
@@ -15,7 +14,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # This will take the last 3 parts of the path: grounding_worldmodeling/spoc/masked_grpo
 EXPERIMENT_NAME=$(echo $SCRIPT_DIR | rev | cut -d'/' -f1-3 | rev | tr '/' '-')
 
-# --------- 磁盘清理：如已存在同名实验目录，先删除 ---------
+
 if [ -d "data/$EXPERIMENT_NAME" ]; then
   echo "[Cleanup] Remove old data/$EXPERIMENT_NAME to free disk space"
   rm -rf "data/$EXPERIMENT_NAME"
@@ -58,7 +57,6 @@ tmux send-keys -t "$SERVER_SESSION" "export MESA_GL_VERSION_OVERRIDE=3.3" C-m
 tmux send-keys -t "$SERVER_SESSION" "export LIBGL_ALWAYS_SOFTWARE=1" C-m
 tmux send-keys -t "$SERVER_SESSION" "export EGL_PLATFORM=surfaceless" C-m
 tmux send-keys -t "$SERVER_SESSION" "export GALLIUM_DRIVER=llvmpipe" C-m
-# headlessly，防止 AI2-THOR 在 X11 下弹窗 这个可能是val创建环境的错误来源 ↓
 # tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
 tmux send-keys -t "$SERVER_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$SERVER_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
@@ -73,7 +71,22 @@ tmux send-keys -t "$SERVER_SESSION" "export PATH=~/bin:\$PATH" C-m
 # Start the server
 # headlessly, prevent AI2-THOR from using a display, which is critical for CloudRendering
 tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
-tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT > $SCRIPT_DIR/logs/server.log 2>&1" C-m
+
+# 验证关键环境变量
+tmux send-keys -t "$SERVER_SESSION" "echo '=== 验证环境变量 ==='" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'MESA_GL_VERSION_OVERRIDE='\$MESA_GL_VERSION_OVERRIDE" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'LIBGL_ALWAYS_SOFTWARE='\$LIBGL_ALWAYS_SOFTWARE" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'EGL_PLATFORM='\$EGL_PLATFORM" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'GALLIUM_DRIVER='\$GALLIUM_DRIVER" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'DISPLAY='\$DISPLAY" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'SPOC_DATA_PATH='\$SPOC_DATA_PATH" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo 'PATH='\$PATH" C-m
+tmux send-keys -t "$SERVER_SESSION" "which vulkaninfo && vulkaninfo" C-m
+tmux send-keys -t "$SERVER_SESSION" "echo '=================='" C-m
+
+# 启动服务器（使用 tee 同时显示和记录日志）
+tmux send-keys -t "$SERVER_SESSION" "echo '启动服务器...'" C-m
+tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT 2>&1 | tee $SCRIPT_DIR/logs/server.log" C-m
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
@@ -106,6 +119,8 @@ tmux send-keys -t "$TRAIN_SESSION" "export PYTHONPATH=/root/VAGEN:\$PYTHONPATH" 
 tmux send-keys -t "$TRAIN_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export PYTHONHASHSEED=0" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export HF_HUB_OFFLINE=1" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export TRANSFORMERS_OFFLINE=1" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
