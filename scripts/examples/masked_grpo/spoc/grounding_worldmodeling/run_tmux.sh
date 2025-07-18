@@ -67,7 +67,7 @@ tmux send-keys -t "$SERVER_SESSION" "export PATH=~/bin:\$PATH" C-m
 # Start the server
 # headlessly, prevent AI2-THOR from using a display, which is critical for CloudRendering
 tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
-tmux send-keys -t "$SERVER_SESSION" "xvfb-run -a -s '-screen 0 1024x768x24' python -m vagen.server.server server.port=$PORT > $SCRIPT_DIR/logs/server.log 2>&1" C-m
+tmux send-keys -t "$SERVER_SESSION" "python -m vagen.server.server server.port=$PORT > $SCRIPT_DIR/logs/server.log 2>&1" C-m
 
 # Wait for server to start
 echo "Waiting for server to start on port $PORT..."
