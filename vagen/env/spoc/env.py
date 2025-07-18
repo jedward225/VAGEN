@@ -409,16 +409,16 @@ class SpocEnv(BaseEnv):
             8: {"action": "Pass"},  # Deprecated lookdown
             9: {"action": "PickupObject"}, # Attempts to pick up object in front of gripper
             10: {"action": "ReleaseObject"},
-            11: {"action": "MoveArmRelative", "y": 0.1},
-            12: {"action": "MoveArmRelative", "y": -0.1},
-            13: {"action": "MoveArmRelative", "z": 0.1},
-            14: {"action": "MoveArmRelative", "z": -0.1},
+            11: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0.1, "z": 0}},
+            12: {"action": "MoveArmRelative", "offset": {"x": 0, "y": -0.1, "z": 0}},
+            13: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": 0.1}},
+            14: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": -0.1}},
             15: {"action": "RotateWristRelative", "yaw": -10},
             16: {"action": "RotateWristRelative", "yaw": 10},
-            17: {"action": "MoveArmRelative", "y": 0.02},
-            18: {"action": "MoveArmRelative", "y": -0.02},
-            19: {"action": "MoveArmRelative", "z": 0.02},
-            20: {"action": "MoveArmRelative", "z": -0.02},
+            17: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0.02, "z": 0}},
+            18: {"action": "MoveArmRelative", "offset": {"x": 0, "y": -0.02, "z": 0}},
+            19: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": 0.02}},
+            20: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": -0.02}},
         }
 
         params = action_map.get(action_index, {"action": "Pass"})
