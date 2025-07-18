@@ -230,8 +230,8 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
     - format_correct: whether the response strictly follows the expected format
     """
     # DEBUG: Add detailed logging for SPOC debugging
-    print(f"[DEBUG PARSE] Raw response (first 500 chars): {response[:500]}...")
-    print(f"[DEBUG PARSE] Response length: {len(response)} chars")
+    # print(f"[DEBUG PARSE] Raw response (first 500 chars): {response[:500]}...")
+    # print(f"[DEBUG PARSE] Response length: {len(response)} chars")
     
     response = response.replace("<image>","")
     # Pattern to check for content strictly in the expected format
@@ -239,13 +239,13 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
     strict_match = re.match(strict_pattern, response.strip(), re.DOTALL)
     format_correct = strict_match is not None
     
-    print(f"[DEBUG PARSE] Strict format check: {format_correct}")
+    # print(f"[DEBUG PARSE] Strict format check: {format_correct}")
     
     # Pattern to extract content from tags
     extraction_pattern = r'<think>\s*<observation>(.*?)</observation>\s*<reasoning>(.*?)</reasoning>\s*<prediction>(.*?)</prediction>\s*</think>\s*<answer>(.*?)</answer>'
     match = re.search(extraction_pattern, response, re.DOTALL)
     
-    print(f"[DEBUG PARSE] Extraction match found: {match is not None}")
+    # print(f"[DEBUG PARSE] Extraction match found: {match is not None}")
     
     if not match:
         observation_content, reasoning_content, prediction_content, action_content, actions = "", "", "", "", []
@@ -258,10 +258,10 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
         action_content = match.group(4)
         think_content = "<observation>" + observation_content + "</observation><reasoning>" + reasoning_content + "</reasoning><prediction>" + prediction_content + "</prediction>"
         
-        print(f"[DEBUG PARSE] Extracted observation: {observation_content[:100]}...")
-        print(f"[DEBUG PARSE] Extracted reasoning: {reasoning_content[:100]}...")
-        print(f"[DEBUG PARSE] Extracted prediction: {prediction_content[:100]}...")
-        print(f"[DEBUG PARSE] Extracted action_content: {action_content}")
+        # print(f"[DEBUG PARSE] Extracted observation: {observation_content[:100]}...")
+        # print(f"[DEBUG PARSE] Extracted reasoning: {reasoning_content[:100]}...")
+        # print(f"[DEBUG PARSE] Extracted prediction: {prediction_content[:100]}...")
+        # print(f"[DEBUG PARSE] Extracted action_content: {action_content}")
         
         if special_token_list is not None:
             for special_token in special_token_list:
