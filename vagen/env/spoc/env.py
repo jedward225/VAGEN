@@ -119,8 +119,14 @@ class SpocEnv(BaseEnv):
         # Try different platform configurations
         platforms_to_try = []
         
-        # Check if we're in a headless environment
-        if not os.environ.get('DISPLAY'):
+        # Force software rendering in headless environments
+        if not os.environ.get('DISPLAY') or os.environ.get('FORCE_HEADLESS', '0') == '1':
+            # Set additional environment variables for software rendering
+            os.environ['MESA_GL_VERSION_OVERRIDE'] = '3.3'
+            os.environ['MESA_GLSL_VERSION_OVERRIDE'] = '330'
+            os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
+            os.environ['GALLIUM_DRIVER'] = 'llvmpipe'
+            
             # Headless mode - try CloudRendering first
             platforms_to_try.extend(["CloudRendering", "Linux64"])
         else:

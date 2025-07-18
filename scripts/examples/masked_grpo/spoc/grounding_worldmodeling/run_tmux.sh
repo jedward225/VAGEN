@@ -61,6 +61,9 @@ tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_DOCKER_CPU_WARNING=1" C-
 tmux send-keys -t "$SERVER_SESSION" "export RAY_DISABLE_RESOURCE_AUTOSCALING=1" C-m
 tmux send-keys -t "$SERVER_SESSION" "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128" C-m
 tmux send-keys -t "$SERVER_SESSION" "export SPOC_DATA_PATH=/root/spoc_data/fifteen" C-m
+# Create fake vulkaninfo for AI2-THOR
+tmux send-keys -t "$SERVER_SESSION" "mkdir -p ~/bin && echo '#!/bin/bash' > ~/bin/vulkaninfo && echo 'echo \"Fake vulkaninfo\"' >> ~/bin/vulkaninfo && echo 'exit 0' >> ~/bin/vulkaninfo && chmod +x ~/bin/vulkaninfo" C-m
+tmux send-keys -t "$SERVER_SESSION" "export PATH=~/bin:\$PATH" C-m
 # Start the server
 # headlessly, prevent AI2-THOR from using a display, which is critical for CloudRendering
 tmux send-keys -t "$SERVER_SESSION" "unset DISPLAY" C-m
