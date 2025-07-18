@@ -4,7 +4,7 @@ FORMAT_CONFIGS = {
     "free_think": {
         "description": "You should first give your thought process, and then your answer.",
         "format": "<think>...</think><answer>...</answer>",
-        "example": """<think>Navigation camera: I can see the target mug on the kitchen counter ahead. Manipulation camera: The counter surface is visible but the mug is not yet in my manipulation range. Arm state: retracted (z=0.0m, y=0.8m), wrist=0°, empty gripper. I need to navigate closer first, then extend my arm to pick it up.</think><answer>moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
+        "example": """<think>Navigation view: I can see the target mug on the kitchen counter ahead. Manipulation view: The counter surface is visible but the mug is not yet in my manipulation range. Arm state: retracted (z=0.0m, y=0.8m), wrist=0°, empty gripper. I need to navigate closer first, then extend my arm to pick it up.</think><answer>moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
     },
     "no_think": {
         "description": "You should provide only your answer.",
@@ -12,19 +12,19 @@ FORMAT_CONFIGS = {
         "example": """<answer>moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
     },
     "grounding": {
-        "description": "You should first give your thought process with your observation and reasoning, and finally your answer.\nThe observation should describe what you see in both navigation and manipulation cameras, and include your arm state.",
+        "description": "You should first give your thought process with your observation and reasoning, and finally your answer.\nThe observation should describe what you see in both navigation and manipulation views, and include your arm state.",
         "format": "<think><observation>...</observation><reasoning>...</reasoning></think><answer>...</answer>",
-        "example": """<think><observation>Navigation camera: I am in a kitchen. There is a counter to my left, a sink ahead, and a dining table to my right. The target mug appears to be on the dining table. Manipulation camera: The table surface is visible but the mug is not yet in my manipulation range. Arm state: My arm is currently retracted (z=0.0m, y=0.8m), wrist angle is 0°, gripper is empty and not holding anything.</observation><reasoning>I need to move toward the dining table to get the mug within my manipulation range. I'll turn right and move forward to approach the table, then extend my arm to reach the mug.</reasoning></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out</answer>"""
+        "example": """<think><observation>Navigation view: I am in a kitchen. There is a counter to my left, a sink ahead, and a dining table to my right. The target mug appears to be on the dining table. Manipulation view: The table surface is visible but the mug is not yet in my manipulation range. Arm state: My arm is currently retracted (z=0.0m, y=0.8m), wrist angle is 0°, gripper is empty and not holding anything.</observation><reasoning>I need to move toward the dining table to get the mug within my manipulation range. I'll turn right and move forward to approach the table, then extend my arm to reach the mug.</reasoning></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out</answer>"""
     },
     "worldmodeling": {
         "description": "You should first give your thought process with reasoning and prediction of next state, then your answer.\nThe prediction should describe what you expect to see in both cameras and your arm state after actions.",
         "format": "<think><reasoning>...</reasoning><prediction>...</prediction></think><answer>...</answer>",
-        "example": """<think><reasoning>I can see the target mug on the table through my navigation camera. I need to get closer to it and position my arm properly for grasping. My manipulation camera will show the mug clearly once I'm in range.</reasoning><prediction>Navigation camera: I will be standing next to the dining table with the mug clearly visible. Manipulation camera: The mug will be prominently displayed in the center of my view, within grasping distance. Arm state: My arm will be extended outward (z=0.2m, y=0.8m), wrist positioned for optimal grasping, gripper ready to close around the mug.</prediction></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}move_arm_out</answer>"""
+        "example": """<think><reasoning>I can see the target mug on the table through my navigation view. I need to get closer to it and position my arm properly for grasping. My manipulation view will show the mug clearly once I'm in range.</reasoning><prediction>Navigation view: I will be standing next to the dining table with the mug clearly visible. Manipulation view: The mug will be prominently displayed in the center of my view, within grasping distance. Arm state: My arm will be extended outward (z=0.2m, y=0.8m), wrist positioned for optimal grasping, gripper ready to close around the mug.</prediction></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}move_arm_out</answer>"""
     },
     "grounding_worldmodeling": {
         "description": "You should first give your thought process with your observation, reasoning, and prediction of next state, then your answer.\nInclude both camera views and arm proprioception in observation and prediction.",
         "format": "<think><observation>...</observation><reasoning>...</reasoning><prediction>...</prediction></think><answer>...</answer>",
-        "example": """<think><observation>Navigation camera: I am in a kitchen with a dining table to my right. The target mug is visible on the table surface. Manipulation camera: The table edge is visible but the mug is not yet in my manipulation range. Arm state: My arm is retracted (z=0.0m, y=0.8m), wrist at 0°, gripper empty and ready.</observation><reasoning>I need to move closer to the table to get the mug within my manipulation range. I'll turn right and move forward to approach the table, then extend my arm outward to reach the mug.</reasoning><prediction>Navigation camera: I will be standing close to the dining table with the mug clearly visible. Manipulation camera: The mug will be prominently displayed and within grasping distance. Arm state: My arm will be extended outward (z=0.2m, y=0.8m), positioned optimally for grasping the mug.</prediction></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}move_arm_out</answer>"""
+        "example": """<think><observation>Navigation view: I am in a kitchen with a dining table to my right. The target mug is visible on the table surface. Manipulation view: The table edge is visible but the mug is not yet in my manipulation range. Arm state: My arm is retracted (z=0.0m, y=0.8m), wrist at 0°, gripper empty and ready.</observation><reasoning>I need to move closer to the table to get the mug within my manipulation range. I'll turn right and move forward to approach the table, then extend my arm outward to reach the mug.</reasoning><prediction>Navigation view: I will be standing close to the dining table with the mug clearly visible. Manipulation view: The mug will be prominently displayed and within grasping distance. Arm state: My arm will be extended outward (z=0.2m, y=0.8m), positioned optimally for grasping the mug.</prediction></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}move_arm_out</answer>"""
     }
 }
 
@@ -38,88 +38,61 @@ def system_prompt(**kwargs):
     if selected_format in ["free_think", "default"]:
         example=f"""Example:
 Round 1:
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think>Navigation camera shows I'm in a kitchen with the target coffee mug on the counter ahead. Manipulation camera shows the counter edge but mug is not in range yet. My arm is retracted. I need to navigate closer to get the mug within manipulation range.</think>
+<think>The navigation view shows I'm in a kitchen with the target coffee mug on the counter ahead. The manipulation view shows the counter edge but mug is not in range yet. My arm is retracted. I need to navigate closer to get the mug within manipulation range.</think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think>Good, I'm now closer to the counter. The navigation camera shows the mug is directly ahead. Manipulation camera shows the mug is now visible and within reach. I need to extend my arm out to reach the mug position.</think>
+<think>Good, I'm now closer to the counter. The navigation view shows the mug is directly ahead. The manipulation view shows the mug is now visible and within reach. I need to extend my arm out to reach the mug position.</think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
-<think>Perfect! My arm is extended and I've successfully grasped the mug. Navigation camera shows I'm holding the target object. Manipulation camera confirms the mug is securely in my gripper. Task completed successfully.</think>
+<think>Perfect! My arm is extended and I've successfully grasped the mug. The navigation view shows I'm holding the target object. Manipulation camera confirms the mug is securely in my gripper. Task completed successfully.</think>
 <answer>Done - mug retrieved</answer>
 Round 4:
 Env_feedback: Success"""
     elif selected_format == "grounding":
         example=f"""Example:
 Round 1:
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think><observation>Navigation camera: I am in a kitchen environment. There is a counter ahead with the target coffee mug visible on its surface. Manipulation camera: I can see the counter edge but the mug is not yet within my manipulation range. Arm state: My arm is fully retracted (z=0.0m, y=0.8m), wrist is at neutral position (0°), and gripper is empty.</observation><reasoning>I need to navigate closer to the counter to bring the mug within my manipulation range. Moving forward will position me optimally for the pick-up task.</reasoning></think>
+<think><observation>Navigation view: I am in a kitchen environment. There is a counter ahead with the target coffee mug visible on its surface. Manipulation view: I can see the counter edge but the mug is not yet within my manipulation range. Arm state: My arm is fully retracted (z=0.0m, y=0.8m), wrist is at neutral position (0°), and gripper is empty.</observation><reasoning>I need to navigate closer to the counter to bring the mug within my manipulation range. Moving forward will position me optimally for the pick-up task.</reasoning></think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think><observation>Navigation camera: I am now positioned closer to the counter with the mug clearly visible ahead. Manipulation camera: The mug is now prominently displayed in my manipulation view and appears to be within reach. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at 0°, gripper ready for action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action.</reasoning></think>
+<think><observation>Navigation view: I am now positioned closer to the counter with the mug clearly visible ahead. Manipulation view: The mug is now prominently displayed in my manipulation view and appears to be within reach. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at 0°, gripper ready for action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action.</reasoning></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
-<think><observation>Navigation camera: I am still positioned at the counter, and I can see that I am now holding the target mug. Manipulation camera: The mug is securely grasped in my gripper and clearly visible. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>I have successfully retrieved the target object. The task has been completed as the mug is now in my possession.</reasoning></think>
+<think><observation>Navigation view: I am still positioned at the counter, and I can see that I am now holding the target mug. Manipulation view: The mug is securely grasped in my gripper and clearly visible. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>I have successfully retrieved the target object. The task has been completed as the mug is now in my possession.</reasoning></think>
 <answer>Task completed - mug retrieved</answer>
 Round 4:
 Env_feedback: Success"""
     elif selected_format == "worldmodeling":
         example=f"""Example:
 Round 1:
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think><reasoning>I can see the target coffee mug on the counter through my navigation camera. It's positioned ahead of me but not yet within my manipulation range. My arm is currently retracted and I need to get closer to the counter for successful manipulation.</reasoning><prediction>Navigation camera: I will be standing closer to the counter with the mug clearly visible and accessible. Manipulation camera: The mug will be prominently displayed in my manipulation view, positioned optimally for grasping. Arm state: My arm will remain retracted (z=0.0m, y=0.8m) but I'll be in position to extend it toward the mug.</prediction></think>
+<think><reasoning>I can see the target coffee mug on the counter through my navigation view. It's positioned ahead of me but not yet within my manipulation range. My arm is currently retracted and I need to get closer to the counter for successful manipulation.</reasoning><prediction>Navigation view: I will be standing closer to the counter with the mug clearly visible and accessible. Manipulation view: The mug will be prominently displayed in my manipulation view, positioned optimally for grasping. Arm state: My arm will remain retracted (z=0.0m, y=0.8m) but I'll be in position to extend it toward the mug.</prediction></think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think><reasoning>Perfect positioning achieved. The mug is now clearly visible in both cameras and within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to grasp it.</reasoning><prediction>Navigation camera: I will maintain my position at the counter while holding the mug. Manipulation camera: The mug will be securely grasped and visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper.</prediction></think>
+<think><reasoning>Perfect positioning achieved. The mug is now clearly visible in both cameras and within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to grasp it.</reasoning><prediction>Navigation view: I will maintain my position at the counter while holding the mug. Manipulation view: The mug will be securely grasped and visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper.</prediction></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <think><reasoning>Excellent! I have successfully grasped the target mug. My arm is properly extended and the gripper has secured the object. The task objective has been achieved.</reasoning><prediction>Task completed successfully. I will maintain my current position with the mug securely held, ready for any subsequent instructions or task completion confirmation.</prediction></think>
 <answer>Task completed - mug retrieved</answer>
@@ -128,56 +101,38 @@ Env_feedback: Success"""
     elif selected_format == "grounding_worldmodeling":
         example=f"""Example:
 Round 1:
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think><observation>Navigation camera: I am in a kitchen environment with a counter directly ahead. The target coffee mug is visible on the counter surface. Manipulation camera: I can see the counter edge in my manipulation view, but the mug is not yet within my manipulation range. Arm state: My arm is fully retracted (z=0.0m, y=0.8m), wrist is at neutral position (0°), and gripper is empty and ready.</observation><reasoning>I need to navigate closer to the counter to bring the mug within my manipulation range. Moving forward will position me optimally for the subsequent manipulation actions.</reasoning><prediction>Navigation camera: I will be standing closer to the counter with the mug clearly visible and accessible. Manipulation camera: The mug will be prominently displayed in my manipulation view, positioned optimally for arm extension and grasping. Arm state: My arm will remain retracted but I'll be in optimal position to extend toward the mug.</prediction></think>
+<think><observation>Navigation view: I am in a kitchen environment with a counter directly ahead. The target coffee mug is visible on the counter surface. Manipulation view: I can see the counter edge in my manipulation view, but the mug is not yet within my manipulation range. Arm state: My arm is fully retracted (z=0.0m, y=0.8m), wrist is at neutral position (0°), and gripper is empty and ready.</observation><reasoning>I need to navigate closer to the counter to bring the mug within my manipulation range. Moving forward will position me optimally for the subsequent manipulation actions.</reasoning><prediction>Navigation view: I will be standing closer to the counter with the mug clearly visible and accessible. Manipulation view: The mug will be prominently displayed in my manipulation view, positioned optimally for arm extension and grasping. Arm state: My arm will remain retracted but I'll be in optimal position to extend toward the mug.</prediction></think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think><observation>Navigation camera: I am now positioned optimally at the counter with the mug clearly visible ahead. Manipulation camera: The mug is now prominently displayed in my manipulation view and appears to be within reach of my arm. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at neutral position (0°), gripper empty and ready for pickup action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to secure the object.</reasoning><prediction>Navigation camera: I will maintain my position at the counter while successfully holding the target mug. Manipulation camera: The mug will be securely grasped and clearly visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper, task completed.</prediction></think>
+<think><observation>Navigation view: I am now positioned optimally at the counter with the mug clearly visible ahead. Manipulation view: The mug is now prominently displayed in my manipulation view and appears to be within reach of my arm. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at neutral position (0°), gripper empty and ready for pickup action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to secure the object.</reasoning><prediction>Navigation view: I will maintain my position at the counter while successfully holding the target mug. Manipulation view: The mug will be securely grasped and clearly visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper, task completed.</prediction></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
-<think><observation>Navigation camera: I am positioned at the counter and successfully holding the target coffee mug as intended. Manipulation camera: The mug is securely grasped in my gripper and clearly visible, confirming successful task completion. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>Perfect! I have successfully completed the manipulation task. The target object is now securely in my possession, fulfilling the task requirements.</reasoning><prediction>Task completed successfully. I will maintain this position with the mug securely held, ready for task completion confirmation or any subsequent instructions.</prediction></think>
+<think><observation>Navigation view: I am positioned at the counter and successfully holding the target coffee mug as intended. Manipulation view: The mug is securely grasped in my gripper and clearly visible, confirming successful task completion. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>Perfect! I have successfully completed the manipulation task. The target object is now securely in my possession, fulfilling the task requirements.</reasoning><prediction>Task completed successfully. I will maintain this position with the mug securely held, ready for task completion confirmation or any subsequent instructions.</prediction></think>
 <answer>Task completed - mug successfully retrieved</answer>
 Round 4:
 Env_feedback: Success"""
     elif selected_format == "no_think":
         example=f"""Example:
 Round 1:
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Navigation Camera:
-[Navigation view showing environment]
-Manipulation Camera:
-[Manipulation view showing close-up]
+Visual Observation: <image>
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <answer>Task completed</answer>
 Round 4:
@@ -185,9 +140,10 @@ Env_feedback: Success"""
         
     base_prompt_text = """You are a Stretch robot performing object manipulation tasks in home environments.
 
-DUAL CAMERA SYSTEM:
-- Navigation Camera: Provides wide-field view for spatial awareness and navigation
-- Manipulation Camera: Provides close-up view of objects within manipulation range
+VISUAL OBSERVATION:
+You receive a single visual observation that combines two camera views side-by-side:
+- Left side: Navigation Camera - wide-field view for spatial awareness and navigation
+- Right side: Manipulation Camera - close-up view of objects within manipulation range
 
 ARM PROPRIOCEPTION:
 Your arm state is always provided with these parameters:
@@ -223,15 +179,15 @@ Manipulation Actions:
 - move_arm_in_small: Retract the arm inward by 0.02 meters (fine adjustment)
 
 COORDINATION STRATEGY:
-1. Use Navigation Camera to locate target objects and plan approach
+1. Use the navigation view (left side) to locate target objects and plan approach
 2. Use base movement actions to position yourself optimally
-3. Use Manipulation Camera to precisely guide arm movements
+3. Use the manipulation view (right side) to precisely guide arm movements
 4. Monitor arm proprioception to ensure accurate positioning
-5. Coordinate both cameras to maintain spatial awareness during manipulation
+5. Coordinate both views to maintain spatial awareness during manipulation
 
 MANIPULATION WORKFLOW:
-1. Navigate to target using navigation camera and base movements
-2. Position yourself so target appears in manipulation camera
+1. Navigate to target using navigation view (left side) and base movements
+2. Position yourself so target appears in manipulation view (right side)
 3. Extend arm outward (move_arm_out) to reach target
 4. Adjust arm height (move_arm_up/down) if needed
 5. Fine-tune positioning with small movements if necessary
@@ -252,10 +208,7 @@ def init_observation_template(**kwargs):
     arm_state = kwargs.get("arm_state", "z=0.0m, y=0.8m, wrist=0°, gripper=empty")
     
     return f"""[Initial Observation]:
-Navigation Camera:
-<image>
-Manipulation Camera:
-<image>
+{observation}
 Arm State: {arm_state}
 Human Instruction: {instruction}
 Decide your next action(s)."""
@@ -274,10 +227,7 @@ The environment feedback is: {env_feedback}
 reward: {reward}
 done: {done}
 After that, the observation is:
-Navigation Camera:
-<image>
-Manipulation Camera:
-<image>
+{observation}
 Arm State: {arm_state}
 Human Instruction: {instruction}
 Decide your next action(s)."""

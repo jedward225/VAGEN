@@ -546,28 +546,30 @@ class SpocEnv(BaseEnv):
         # Convert concatenated frame to PIL Image
         pil_image = convert_numpy_to_PIL(concatenated_frame)
         
-        # For VLM, provide a single concatenated image
+        # For VLM, provide the concatenated image as a list (required by serialization)
         multi_modal_data = {
-            img_placeholder: pil_image  # Single concatenated image
+            img_placeholder: [pil_image]  # List containing the concatenated image
         }
         
         # Get current arm state
         arm_state = self._get_arm_state()
         
-        # Format the template
+        # Format the template with arm state passed directly
         if init_obs:
             obs_str = init_observation_template(
-                observation=f"Proprioception: {arm_state}\nVisuals: {img_placeholder}",
+                observation=f"Visual Observation: {img_placeholder}",
                 instruction=self.episode_language_instruction,
+                arm_state=arm_state.replace("Arm is at", "").replace(", gripper is", ", gripper=").strip().rstrip(".")
             ) + "\n" + format_prompt_text
         else:
             obs_str = action_template(
                 valid_action=self.valid_actions,
-                observation=f"Proprioception: {arm_state}\nVisuals: {img_placeholder}",
+                observation=f"Visual Observation: {img_placeholder}",
                 reward=self.reward,
                 done=self.measure_success()[0],
                 instruction=self.episode_language_instruction,
-                env_feedback=self.info["env_feedback"]
+                env_feedback=self.info["env_feedback"],
+                arm_state=arm_state.replace("Arm is at", "").replace(", gripper is", ", gripper=").strip().rstrip(".")
             ) + "\n" + format_prompt_text
         
         return {
@@ -680,7 +682,7 @@ if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/jiajunl
     
     # Save the first image
     if obs["multi_modal_data"][config.image_placeholder]:
-        img = obs["multi_modal_data"][config.image_placeholder]
+        img = obs["multi_modal_data"][config.image_placeholder][0]
         img.save(f"./test_spoc/spoc_{i}.png")
         
     done = False
@@ -709,7 +711,7 @@ if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/jiajunl
         print(obs["obs_str"])
 
         if obs["multi_modal_data"][config.image_placeholder]:
-            img = obs["multi_modal_data"][config.image_placeholder]
+            img = obs["multi_modal_data"][config.image_placeholder][0]
             img.save(f"./test_spoc/spoc_{i}.png")
         
         print(f"Success Metric: {info.get('task_success')}")
