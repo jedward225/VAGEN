@@ -113,6 +113,16 @@ class SpocEnv(BaseEnv):
             "snapToGrid": False,
             "fastActionEmit": True,
             "cameraNearPlane": 0.01,
+            # Enable third-party camera for manipulation view
+            "thirdPartyCameras": [
+                {
+                    "position": {"x": 0, "y": 0, "z": 0},  # Will be set relative to arm
+                    "rotation": {"x": 0, "y": 0, "z": 0},
+                    "fieldOfView": config.fov,
+                    "width": config.resolution,
+                    "height": config.resolution
+                }
+            ]
         }
 
         self.env = None
@@ -494,25 +504,51 @@ class SpocEnv(BaseEnv):
             add_example=False
         )
         
-        # --- Get the frame from AI2-THOR ---
-        frame = self.env.last_event.frame
-        if frame is None:
+        # --- Get the navigation camera frame from AI2-THOR ---
+        nav_frame = self.env.last_event.frame
+        if nav_frame is None:
             # If frame is None, execute a Pass action to get the first frame
             self.env.step("Pass")
-            frame = self.env.last_event.frame
+            nav_frame = self.env.last_event.frame
             
-        if frame is None:
+        if nav_frame is None:
             # If still None, create a black placeholder image
             import numpy as np
-            frame = np.zeros((self.config.resolution, self.config.resolution, 3), dtype=np.uint8)
-            
-        # Convert frame to PIL Image
-        pil_image = convert_numpy_to_PIL(frame)
+            nav_frame = np.zeros((self.config.resolution, self.config.resolution, 3), dtype=np.uint8)
         
-        # For dual camera setup, use the same image for both cameras
-        # In a real dual camera setup, you would get two different frames
+        # --- Get the manipulation camera frame ---
+        try:
+            # Try to get the third-party camera frame (manipulation camera)
+            if hasattr(self.env.last_event, 'third_party_camera_frames') and self.env.last_event.third_party_camera_frames:
+                manip_frame = self.env.last_event.third_party_camera_frames[0]
+                # Take only RGB channels if it has alpha channel
+                if manip_frame.shape[2] > 3:
+                    manip_frame = manip_frame[:, :, :3]
+            else:
+                # If no manipulation camera available, use navigation camera as fallback
+                manip_frame = nav_frame
+        except Exception as e:
+            print(f"Warning: Could not get manipulation camera frame: {e}")
+            manip_frame = nav_frame
+            
+        # Apply the same cropping as in SPOC (6 pixels from each side)
+        nav_cutoff = round(nav_frame.shape[1] * 6 / 396)
+        manip_cutoff = round(manip_frame.shape[1] * 6 / 396)
+        
+        if nav_cutoff > 0:
+            nav_frame = nav_frame[:, nav_cutoff:-nav_cutoff, :]
+        if manip_cutoff > 0:
+            manip_frame = manip_frame[:, manip_cutoff:-manip_cutoff, :]
+            
+        # Concatenate the two camera images side by side (like in SPOC)
+        concatenated_frame = np.concatenate([nav_frame, manip_frame], axis=1)
+        
+        # Convert concatenated frame to PIL Image
+        pil_image = convert_numpy_to_PIL(concatenated_frame)
+        
+        # For VLM, provide a single concatenated image
         multi_modal_data = {
-            img_placeholder: [pil_image, pil_image]  # Two identical images for now
+            img_placeholder: pil_image  # Single concatenated image
         }
         
         # Get current arm state
@@ -644,7 +680,7 @@ if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/jiajunl
     
     # Save the first image
     if obs["multi_modal_data"][config.image_placeholder]:
-        img = obs["multi_modal_data"][config.image_placeholder][0]
+        img = obs["multi_modal_data"][config.image_placeholder]
         img.save(f"./test_spoc/spoc_{i}.png")
         
     done = False
@@ -673,7 +709,7 @@ if __name__ == "__main__":    # remember to "export SPOC_DATA_PATH=/home/jiajunl
         print(obs["obs_str"])
 
         if obs["multi_modal_data"][config.image_placeholder]:
-            img = obs["multi_modal_data"][config.image_placeholder][0]
+            img = obs["multi_modal_data"][config.image_placeholder]
             img.save(f"./test_spoc/spoc_{i}.png")
         
         print(f"Success Metric: {info.get('task_success')}")
