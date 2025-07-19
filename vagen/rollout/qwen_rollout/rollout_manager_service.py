@@ -67,7 +67,14 @@ class QwenVLRolloutManagerService():
         - For do_embedding=True, replace <image> with <|vision_start|>{image_token}<|vision_end|> -> prompt_template
             - where {image_token} is the length of image embedding
         """
-        assert len(image_data) == prompt_template.count('<image>'), 'Number of images does not match number of <image> in the prompt template'
+        image_count = len(image_data)
+        image_tag_count = prompt_template.count('<image>')
+        if image_count != image_tag_count:
+            print(f"[DEBUG] Image count mismatch:")
+            print(f"[DEBUG] - Number of images in image_data: {image_count}")
+            print(f"[DEBUG] - Number of <image> tags in prompt: {image_tag_count}")
+            print(f"[DEBUG] - Prompt template preview: {prompt_template[:500]}...")
+        assert len(image_data) == prompt_template.count('<image>'), f'Number of images ({image_count}) does not match number of <image> tags ({image_tag_count}) in the prompt template'
         raw_prompt = prompt_template.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')
         row_dict['multi_modal_data'] = {'image': image_data}
         image_grid_thw = None
@@ -347,7 +354,8 @@ class QwenVLRolloutManagerService():
             if i<len(history)-1 or not is_final:
                 chat.append({"role": "user", "content": record['obs_str']})
                 # Only use images from the most recent observation (for SPOC dual camera)
-                if 'image_data' in record and i == len(history)-1:
+                # For multi-turn, only include images from the last user turn to avoid accumulation
+                if 'image_data' in record and (i == len(history)-1 or (len(history) == 1 and i == 0)):
                     for img in record['image_data']:
                         image_data.append(img)
             

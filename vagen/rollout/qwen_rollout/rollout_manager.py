@@ -335,7 +335,9 @@ class QwenVLRolloutManager():
                 rewards.append(record['reward'])
             if i<len(history)-1 or not is_final:
                 chat.append({"role": "user", "content": record['obs_str']})
-                if 'image_data' in record:
+                # Only use images from the most recent observation (for SPOC dual camera)
+                # For multi-turn, only include images from the last user turn to avoid accumulation
+                if 'image_data' in record and (i == len(history)-1 or (len(history) == 1 and i == 0)):
                     for img in record['image_data']:
                         image_data.append(img)
             
