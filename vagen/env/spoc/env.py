@@ -506,9 +506,18 @@ class SpocEnv(BaseEnv):
     def _generate_topdown_map(self):
         """Generate a top-down map view of the environment using official ToggleMapView."""
         try:
-            print(f"[DEBUG MAP] 使用官方ToggleMapView获取当前场景俯视图")
+            # 获取当前场景信息
+            current_scene = self.env.last_event.metadata.get("sceneName", "unknown")
+            agent_pos = self.env.last_event.metadata["agent"]["position"]
+            
+            print(f"[DEBUG MAP] 当前场景: {current_scene}")
+            print(f"[DEBUG MAP] Agent位置: ({agent_pos['x']:.2f}, {agent_pos['y']:.2f}, {agent_pos['z']:.2f})")
+            
+            # 强制刷新当前场景状态
+            refresh_event = self.env.step({"action": "Pass"})
             
             # 使用官方的ToggleMapView切换到俯视图模式
+            print(f"[DEBUG MAP] 调用ToggleMapView获取场景{current_scene}的俯视图")
             map_event = self.env.step({"action": "ToggleMapView"})
             
             if not map_event.metadata["lastActionSuccess"]:
