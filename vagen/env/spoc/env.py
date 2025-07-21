@@ -397,7 +397,8 @@ class SpocEnv(BaseEnv):
         print(f"[DEBUG SPOC] action_is_valid: {metrics['turn_metrics']['action_is_valid']}")
         print(f"[DEBUG SPOC] format_correct: {rst.get('format_correct', True)}")
         
-        if metrics["turn_metrics"]["action_is_valid"] and rst.get("format_correct", True):
+        # Execute actions if we have valid actions, regardless of format (fallback parsing handles this)
+        if metrics["turn_metrics"]["action_is_valid"]:
             print(f"[DEBUG SPOC] Executing {len(action_list)} actions: {action_list}")
             
             for i, action in enumerate(action_list):
