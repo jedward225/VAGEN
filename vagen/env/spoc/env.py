@@ -506,39 +506,22 @@ class SpocEnv(BaseEnv):
     def _generate_topdown_map(self):
         """Generate a top-down map view of the environment."""
         try:
-            # Get current scene bounds and agent position for proper camera positioning
-            agent_pos = self.env.last_event.metadata["agent"]["position"]
-            scene_bounds = self.env.last_event.metadata.get("sceneBounds", {})
-            
-            # Calculate scene center and size for optimal camera positioning
-            if scene_bounds and "center" in scene_bounds and "size" in scene_bounds:
-                scene_center = scene_bounds["center"]
-                scene_size = scene_bounds["size"]
-                camera_y = scene_center["y"] + max(scene_size["x"], scene_size["z"]) * 0.8
-                orthographic_size = max(scene_size["x"], scene_size["z"]) * 0.6
-            else:
-                # Fallback: position camera above agent
-                camera_y = agent_pos["y"] + 3.0  
-                orthographic_size = 5.0
-                scene_center = {"x": agent_pos["x"], "z": agent_pos["z"]}
-            
-            # Clear existing third-party cameras and create new one positioned for current scene
-            self.env.step({"action": "RemoveThirdPartyCamera", "thirdPartyCameraId": 0})
-            
-            # Add properly positioned third-party camera for this scene
-            camera_config = {
-                "action": "AddThirdPartyCamera",
-                "thirdPartyCameraId": 0,
-                "position": {"x": scene_center["x"], "y": camera_y, "z": scene_center["z"]},
-                "rotation": {"x": 90, "y": 0, "z": 0},  # Look straight down
-                "fieldOfView": 60,
-                "orthographic": True,
-                "orthographicSize": orthographic_size,
-                "skyboxColor": "white"
-            }
-            
-            print(f"[DEBUG MAP] Positioning camera at {camera_config['position']} with size {orthographic_size}")
-            self.env.step(camera_config)
+            # Initialize third-party camera using the working AI2-THOR approach
+            if len(self.env.last_event.third_party_camera_frames) < 1:
+                # Use the original working method but ensure it's for current scene
+                event = self.env.step({"action": "GetMapViewCameraProperties"})
+                if event.metadata["lastActionSuccess"]:
+                    cam = event.metadata["actionReturn"].copy()
+                    # Adjust camera for better coverage
+                    cam["orthographicSize"] = cam.get("orthographicSize", 5.0) * 1.5  # Larger view
+                    cam["skyboxColor"] = "white"
+                    
+                    print(f"[DEBUG MAP] Setting up camera with orthographicSize: {cam['orthographicSize']}")
+                    camera_event = self.env.step({"action": "AddThirdPartyCamera", **cam})
+                    print(f"[DEBUG MAP] Camera setup success: {camera_event.metadata['lastActionSuccess']}")
+                else:
+                    print("[DEBUG MAP] Failed to get map view camera properties")
+                    return
             
             # Get current agent trajectory (just current position)
             agent_pos = self.env.last_event.metadata["agent"]["position"]
@@ -579,28 +562,25 @@ class SpocEnv(BaseEnv):
                     "waypoints": waypoints,
                 })
             
-            # Visualize agent path
+            # Visualize agent path to show current position
             path_event = self.env.step({"action": "VisualizePath", "positions": agent_path})
             
-            # Get the third-party camera frame - use a simple Pass action to get the current frame
-            camera_event = self.env.step({"action": "Pass"})  # This ensures we get the current third-party camera frame
-            
-            # Clean up visualization
-            self.env.step({"action": "HideVisualizedPath"})
-            
-            # Get the generated top-down view from the positioned camera
-            if len(camera_event.third_party_camera_frames) > 0:
-                topdown_frame = camera_event.third_party_camera_frames[0]  # Use first (our positioned camera)
+            # Get the current third-party camera frame
+            if len(path_event.third_party_camera_frames) > 0:
+                topdown_frame = path_event.third_party_camera_frames[-1]
                 
                 print(f"[DEBUG MAP] Raw map frame shape: {topdown_frame.shape}")
+                print(f"[DEBUG MAP] Agent position on map: x={agent_pos['x']:.2f}, z={agent_pos['z']:.2f}")
                 
-                # Store the map in the environment state (no cropping for better view)
+                # Store the map in the environment state
                 self.current_topdown_map = topdown_frame
-                print(f"[DEBUG MAP] Generated synchronized top-down map: shape={topdown_frame.shape}")
-                print(f"[DEBUG MAP] Map shows current scene at agent position {agent_pos}")
+                print(f"[DEBUG MAP] Generated top-down map for current scene: shape={topdown_frame.shape}")
             else:
                 print("[DEBUG MAP] Warning: No third-party camera frames available")
                 self.current_topdown_map = None
+                
+            # Clean up visualization
+            self.env.step({"action": "HideVisualizedPath"})
                 
         except Exception as e:
             print(f"[DEBUG MAP] Error generating top-down map: {e}")
