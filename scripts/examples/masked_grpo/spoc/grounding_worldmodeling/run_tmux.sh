@@ -155,7 +155,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
     data.train_batch_size=4 \\
     data.max_prompt_length=1024 \\
-    data.max_response_length=500 \\
+    data.max_response_length=800 \\
     data.max_trajectory_length=4096 \\
     actor_rollout_ref.rollout.max_trajectory_length=4096 \\
     data.image_key=images \\

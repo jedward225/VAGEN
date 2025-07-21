@@ -1,9 +1,12 @@
 from vagen.env.base.base_env import BaseEnv
 import ai2thor.controller
+import ai2thor.platform
+import ai2thor.fifo_server
 import numpy as np
 import time
 import math
 import os
+import sys
 import time
 
 from vagen.env.utils.context_utils import convert_numpy_to_PIL
@@ -92,84 +95,69 @@ class SpocEnv(BaseEnv):
         for key, value in env_vars_to_set.items():
             os.environ[key] = value
 
+        # SPOC official configuration (from STRETCH_ENV_ARGS)
         self.thor_config = {
-            "agentMode": "stretch",
-            "gridSize": 0.1,
-            "visibilityDistance": 10,
+            "gridSize": 0.15,  # SPOC uses 0.15 (AGENT_MOVEMENT_CONSTANT * 0.75)
+            "width": 396,      # INTEL_CAMERA_WIDTH
+            "height": 224,     # INTEL_CAMERA_HEIGHT  
+            "visibilityDistance": 0.8673349051766235,  # MAXIMUM_DISTANCE_ARM_FROM_AGENT_CENTER
             "visibilityScheme": "Distance",
-            "renderDepthImage": False,  # Disable depth to reduce memory usage
-            "renderInstanceSegmentation": True,  # Enable for SPOC compatibility
-            "width": config.resolution,
-            "height": config.resolution,
-            "fieldOfView": config.fov,
-            "server_timeout": 900, 
-            "server_start_timeout": 900,
-            "quality": "Ultra",  # Maximum quality for CloudRendering
-            # CloudRendering specific fixes
-            "makeAgentsVisible": False,
-            "renderInteractableShader": False,
-            # SPOC-specific parameters
+            "fieldOfView": 59,  # INTEL_VERTICAL_FOV
+            "server_class": ai2thor.fifo_server.FifoServer,  # Critical for SPOC
             "useMassThreshold": True,
             "massThreshold": 10,
             "autoSimulation": False,
             "autoSyncTransforms": True,
+            "renderInstanceSegmentation": True,
+            "agentMode": "stretch",
+            "renderDepthImage": False,  # SAVE_DEPTH = False
+            "cameraNearPlane": 0.01,    # VERY IMPORTANT
+            "branch": None,             # IMPORTANT: do not use branch
+            "commit_id": "5e43486351ac6339c399c199e601c9dd18daecc3",  # STRETCH_COMMIT_ID
+            "server_timeout": 1000,     # MAXIMUM_SERVER_TIMEOUT (critical for CloudRendering)
             "snapToGrid": False,
             "fastActionEmit": True,
-            "cameraNearPlane": 0.01,
-            "cameraFarPlane": 20.0,
-            # Enable third-party camera for manipulation view
-            "thirdPartyCameras": [
-                {
-                    "position": {"x": 0, "y": 0, "z": 0},  # Will be set relative to arm
-                    "rotation": {"x": 0, "y": 0, "z": 0},
-                    "fieldOfView": config.fov,
-                    "width": config.resolution,
-                    "height": config.resolution
-                }
-            ]
         }
 
         self.env = None
-        # Try different platform configurations
-        platforms_to_try = []
         
-        # Force software rendering in headless environments
-        if not os.environ.get('DISPLAY') or os.environ.get('FORCE_HEADLESS', '0') == '1':
-            # Set additional environment variables for software rendering
-            os.environ['MESA_GL_VERSION_OVERRIDE'] = '3.3'
-            os.environ['MESA_GLSL_VERSION_OVERRIDE'] = '330'
-            os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-            os.environ['GALLIUM_DRIVER'] = 'llvmpipe'
+        # Use SPOC official platform configuration logic
+        try:
+            # Determine platform and GPU device (following SPOC's logic)
+            gpu_device = 0  # Default GPU device
             
-            # Force CloudRendering only (since Linux64 not supported in this environment)
-            platforms_to_try.extend(["CloudRendering"])
-        else:
-            # Force CloudRendering only (since Linux64 not supported in this environment) 
-            platforms_to_try.extend(["CloudRendering"])
-
-        for platform_str in platforms_to_try:
-            try:
-                # 构造配置，直接传入 platform 字符串
-                # 注意：x_display 参数只对 Linux64 有意义，且在 xvfb-run 模式下通常由 xvfb-run 管理
-                config_to_try = {**self.thor_config, "platform": platform_str, "headless": True}
-                
-                print(f"Attempting AI2-THOR with platform: {platform_str}")
-                self.env = ai2thor.controller.Controller(**config_to_try)
-                print(f"Successfully initialized AI2-THOR with platform: {platform_str}")
-                self.thor_config = config_to_try  # 保存成功配置
-                break
-            except Exception as e:
-                print(f"Failed to initialize with platform {platform_str}: {e}")
-                if self.env:
-                    try:
-                        self.env.stop()
-                    except Exception:
-                        pass
-                    self.env = None
-        
-        if self.env is None:
-            raise RuntimeError("Failed to initialize AI2-THOR with any platform configuration. "
-                             "Please check that AI2-THOR is properly installed and the server environment supports headless rendering.")
+            # SPOC platform selection logic
+            if sys.platform.lower() == "darwin":
+                platform = ai2thor.platform.OSXIntel64
+                controller_args = self.thor_config.copy()
+            else:
+                # Use CloudRendering for non-macOS systems
+                platform = ai2thor.platform.CloudRendering
+                controller_args = {
+                    **self.thor_config,
+                    "platform": platform,
+                    "gpu_device": gpu_device,
+                }
+            
+            print(f"[SPOC] Initializing AI2-THOR with platform: {platform}")
+            print(f"[SPOC] Controller args: server_timeout={controller_args.get('server_timeout')}, commit_id={controller_args.get('commit_id')}")
+            
+            # Initialize controller with SPOC configuration
+            self.env = ai2thor.controller.Controller(**controller_args)
+            
+            # Verify the commit ID matches SPOC requirements
+            if hasattr(self.env, '_build') and self.env._build and hasattr(self.env._build, 'commit_id'):
+                actual_commit = self.env._build.commit_id
+                expected_commit = "5e43486351ac6339c399c199e601c9dd18daecc3"
+                if expected_commit not in actual_commit:
+                    print(f"[WARNING] AI2-THOR commit mismatch. Expected: {expected_commit}, Got: {actual_commit}")
+            
+            print(f"[SUCCESS] AI2-THOR initialized successfully with SPOC configuration")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize AI2-THOR with SPOC configuration: {e}")
+            print(f"[ERROR] This may be due to AI2-THOR version mismatch or missing CloudRendering support")
+            raise RuntimeError(f"Failed to initialize AI2-THOR with SPOC configuration: {e}")
         
         # --- Dataset Loading ---
         self.dataset = get_dataset(
@@ -675,10 +663,41 @@ class SpocEnv(BaseEnv):
         except (KeyError, IndexError):
             return "Arm state is unavailable."
 
+    def _analyze_real_visual_scene(self, pil_image):
+        """
+        Generate visual description from real AI2-THOR image.
+        This method analyzes the actual rendered image to describe what the robot sees.
+        """
+        try:
+            # For now, analyze the image statistics to ensure it's real
+            import numpy as np
+            img_array = np.array(pil_image)
+            mean_brightness = np.mean(img_array)
+            std_brightness = np.std(img_array)
+            
+            # Determine scene type based on image characteristics
+            if mean_brightness < 50:
+                brightness_desc = "dimly lit"
+            elif mean_brightness > 150:
+                brightness_desc = "brightly lit"
+            else:
+                brightness_desc = "moderately lit"
+            
+            # Basic environment description based on real image
+            if self.episode_data and self.episode_data.get("targetObjectType"):
+                target_type = self.episode_data["targetObjectType"]
+                return f"The robot observes a {brightness_desc} indoor household environment. The robot is searching for a {target_type} to complete the fetch task. The scene contains various household objects and furniture."
+            else:
+                return f"The robot observes a {brightness_desc} indoor household environment with various objects and furniture."
+                
+        except Exception as e:
+            print(f"Warning: Error analyzing real visual scene: {e}")
+            return "The robot observes an indoor household environment."
+
     def _analyze_visual_scene(self, pil_image):
         """
-        Generate visual description based on SPOC episode metadata.
-        Since CloudRendering is not working, we use the rich SPOC metadata to create intelligent descriptions.
+        Generate visual description based on SPOC episode metadata (fallback method).
+        This is used when real rendering fails.
         """
         try:
             return self._generate_metadata_based_visual_description()
@@ -688,215 +707,38 @@ class SpocEnv(BaseEnv):
     
     def _generate_metadata_based_visual_description(self):
         """
-        Generate intelligent visual descriptions based on SPOC episode metadata.
+        Generate basic visual descriptions (simplified fallback).
+        This is only used if real rendering completely fails.
         """
-        import json
-        import numpy as np
-        
-        # Get current episode metadata
-        if not hasattr(self, 'current_episode') or self.current_episode is None:
+        try:
+            if self.episode_data and self.episode_data.get("targetObjectType"):
+                target_type = self.episode_data["targetObjectType"]
+                return f"The robot observes an indoor household environment. Currently searching for a {target_type} to complete the fetch task."
+            else:
+                return "The robot observes an indoor household environment with various objects and furniture."
+        except Exception:
             return "The robot observes an indoor household environment."
-        
-        # Decode task specification
-        task_spec_bytes = self.current_episode.get('templated_task_spec', b'')
-        if isinstance(task_spec_bytes, np.ndarray):
-            task_spec_bytes = task_spec_bytes.tobytes()
-        
-        try:
-            task_spec = json.loads(task_spec_bytes.decode('utf-8').rstrip('\x00'))
-        except:
-            task_spec = {}
-        
-        # Get current step index
-        current_step = getattr(self, 'current_step_in_episode', 0)
-        
-        # Get navigation and manipulation object info
-        nav_objects = self._decode_object_info('nav_accurate_object_bbox', current_step)
-        manip_objects = self._decode_object_info('manip_accurate_object_bbox', current_step)
-        
-        # Get environment state
-        object_in_hand = bool(self.current_episode.get('an_object_is_in_hand', [False])[current_step]) if current_step < len(self.current_episode.get('an_object_is_in_hand', [])) else False
-        room_seen = bool(self.current_episode.get('room_current_seen', [False])[current_step]) if current_step < len(self.current_episode.get('room_current_seen', [])) else False
-        
-        # Generate description
-        description_parts = []
-        
-        # Navigation view description
-        nav_desc = self._describe_camera_view(nav_objects, task_spec, "navigation", room_seen)
-        description_parts.append(f"Navigation view: {nav_desc}")
-        
-        # Manipulation view description  
-        manip_desc = self._describe_camera_view(manip_objects, task_spec, "manipulation", object_in_hand)
-        description_parts.append(f"Manipulation view: {manip_desc}")
-        
-        return "[Dual camera view] " + ". ".join(description_parts) + "."
     
-    def _decode_object_info(self, bbox_key, step_idx):
-        """Decode object information from SPOC metadata."""
-        try:
-            if bbox_key not in self.current_episode:
-                return []
-            
-            # Get object IDs and types for current step
-            oids_key = f'{bbox_key}/oids_as_bytes'
-            synsets_key = f'{bbox_key}/synset_to_oids_as_bytes'
-            
-            if oids_key in self.current_episode and step_idx < len(self.current_episode[oids_key]):
-                oids_bytes = self.current_episode[oids_key][step_idx]
-                synsets_bytes = self.current_episode[synsets_key][step_idx]
-                
-                # Decode bytes to string
-                if isinstance(oids_bytes, np.ndarray):
-                    oids_bytes = oids_bytes.tobytes()
-                if isinstance(synsets_bytes, np.ndarray):
-                    synsets_bytes = synsets_bytes.tobytes()
-                
-                try:
-                    import json
-                    object_ids = json.loads(oids_bytes.decode('utf-8').rstrip('\x00'))
-                    synset_mapping = json.loads(synsets_bytes.decode('utf-8').rstrip('\x00'))
-                    
-                    # Convert to list of object types
-                    object_types = []
-                    for synset, ids in synset_mapping.items():
-                        readable_name = self._synset_to_readable(synset)
-                        object_types.extend([readable_name] * len(ids))
-                    
-                    return object_types[:5]  # Limit to 5 objects for brevity
-                except:
-                    return []
-            return []
-        except Exception as e:
-            return []
-    
-    def _describe_camera_view(self, objects, task_spec, view_type, context_flag):
-        """Generate description for a camera view based on objects and context."""
-        # Get target object info
-        target_synsets = task_spec.get('synsets', [])
-        target_name = self._synset_to_readable(target_synsets[0]) if target_synsets else 'unknown object'
-        
-        if not objects:
-            if view_type == "navigation":
-                return f"Wide-field view of an indoor environment, searching for {target_name}"
-            else:
-                return "Close-up view showing nearby surfaces and potential interaction areas"
-        
-        # Describe visible objects
-        unique_objects = list(set(objects))
-        if len(unique_objects) == 1:
-            obj_desc = unique_objects[0]
-        elif len(unique_objects) == 2:
-            obj_desc = f"{unique_objects[0]} and {unique_objects[1]}"
-        else:
-            obj_desc = f"{', '.join(unique_objects[:-1])}, and {unique_objects[-1]}"
-        
-        # Check if target object is visible
-        target_visible = any(target_name.lower() in obj.lower() for obj in objects)
-        
-        if view_type == "navigation":
-            base_desc = f"Wide-field view showing {obj_desc} in a household environment"
-            if target_visible:
-                base_desc += f". The target {target_name} is visible"
-            elif context_flag:  # room_seen
-                base_desc += f". Currently in the target room, searching for {target_name}"
-            else:
-                base_desc += f". Exploring to locate {target_name}"
-        else:  # manipulation
-            base_desc = f"Close-up view showing {obj_desc}"
-            if context_flag:  # object_in_hand
-                base_desc += ". An object is currently grasped"
-            elif target_visible:
-                base_desc += f". The target {target_name} is within reach"
-            else:
-                base_desc += ". Ready for potential object interaction"
-        
-        return base_desc
-    
-    def _synset_to_readable(self, synset):
-        """Convert WordNet synset to readable object name."""
-        synset_map = {
-            'houseplant.n.01': 'houseplant',
-            'cup.n.01': 'cup',
-            'bowl.n.01': 'bowl', 
-            'plate.n.04': 'plate',
-            'mug.n.04': 'mug',
-            'book.n.01': 'book',
-            'pillow.n.01': 'pillow',
-            'remote_control.n.01': 'remote control',
-            'cellular_telephone.n.01': 'phone',
-            'watch.n.01': 'watch',
-            'key.n.01': 'key',
-            'credit_card.n.01': 'credit card',
-            'pen.n.01': 'pen',
-            'pencil.n.01': 'pencil',
-            'laptop.n.01': 'laptop'
-        }
-        
-        if synset in synset_map:
-            return synset_map[synset]
-        
-        # Fallback: extract word from synset
-        try:
-            return synset.split('.')[0].replace('_', ' ')
-        except:
-            return 'object'
     
     def _generate_synthetic_frame(self, camera_type):
-        """Generate a meaningful synthetic frame based on SPOC metadata."""
+        """Generate a simple synthetic frame (emergency fallback only)."""
         import numpy as np
         
-        # Get current step and episode info
-        current_step = getattr(self, 'current_step_in_episode', 0)
-        
+        # Create simple frames as absolute fallback
         if camera_type == "navigation":
-            # Navigation camera: wider view, more environmental
             base_color = [100, 120, 140]  # Bluish indoor environment
-            objects = self._decode_object_info('nav_accurate_object_bbox', current_step)
         else:
-            # Manipulation camera: closer view, more object-focused
             base_color = [120, 100, 80]   # Warmer close-up view
-            objects = self._decode_object_info('manip_accurate_object_bbox', current_step)
         
-        # Create base frame
-        frame = np.full((self.config.resolution, self.config.resolution, 3), base_color, dtype=np.uint8)
-        
-        # Add texture based on object count and type
-        texture_intensity = min(len(objects) * 10, 40)
-        if texture_intensity > 0:
-            noise = np.random.randint(-texture_intensity, texture_intensity + 1, frame.shape)
-            frame = np.clip(frame.astype(int) + noise, 0, 255).astype(np.uint8)
-        else:
-            # Add minimal base texture even without objects
-            noise = np.random.randint(-10, 11, frame.shape)
-            frame = np.clip(frame.astype(int) + noise, 0, 255).astype(np.uint8)
-        
-        # Add object-based color variations
-        if objects:
-            for i, obj in enumerate(objects[:3]):  # Max 3 objects to avoid oversaturation
-                # Add colored regions representing objects
-                y_start = (i * 50) % (frame.shape[0] - 50)
-                x_start = (i * 60) % (frame.shape[1] - 60)
-                
-                # Object-specific colors
-                if 'plant' in obj.lower():
-                    obj_color = [60, 150, 60]  # Green for plants
-                elif any(word in obj.lower() for word in ['cup', 'mug', 'bowl']):
-                    obj_color = [180, 160, 140]  # Neutral tableware colors
-                elif any(word in obj.lower() for word in ['book', 'paper']):
-                    obj_color = [200, 200, 180]  # Paper colors
-                else:
-                    obj_color = [160, 140, 120]  # Generic object color
-                
-                # Add object region
-                frame[y_start:y_start+40, x_start:x_start+50] = np.clip(
-                    frame[y_start:y_start+40, x_start:x_start+50] * 0.7 + 
-                    np.array(obj_color) * 0.3, 0, 255
-                ).astype(np.uint8)
+        # Create base frame with simple texture
+        frame = np.full((224, 224, 3), base_color, dtype=np.uint8)
+        noise = np.random.randint(-20, 21, frame.shape)
+        frame = np.clip(frame.astype(int) + noise, 0, 255).astype(np.uint8)
         
         return frame
 
     def _render(self, init_obs=True):
-        """Render the environment observation, including the REAL image."""
+        """Render the environment observation using real AI2-THOR images."""
         img_placeholder = getattr(self.config, "image_placeholder", "<image>")
         
         format_prompt_text = self.format_prompt_func(
@@ -905,34 +747,43 @@ class SpocEnv(BaseEnv):
             add_example=False
         )
         
-        # --- Generate synthetic frames since CloudRendering doesn't work ---
-        # CloudRendering in this AI2-THOR version cannot generate images, so we create meaningful synthetic frames
-        import numpy as np
-        
-        nav_frame = self._generate_synthetic_frame("navigation")
-        manip_frame = self._generate_synthetic_frame("manipulation")
+        # Get the real image from AI2-THOR
+        try:
+            import numpy as np
+            if self.env and self.env.last_event and self.env.last_event.frame is not None:
+                # Use the real frame from AI2-THOR
+                frame = self.env.last_event.frame
+                print(f"[SUCCESS] Got real AI2-THOR frame: shape={frame.shape}, mean={np.mean(frame):.1f}")
+                
+                # Convert numpy array to PIL Image
+                pil_image = convert_numpy_to_PIL(frame)
+                
+                # Generate visual description from the real image
+                visual_description = self._analyze_real_visual_scene(pil_image)
+                
+            else:
+                # Fallback: Check if frame is None
+                print(f"[DEBUG] AI2-THOR frame status: frame={self.env.last_event.frame is not None if self.env.last_event else 'no_event'}")
+                print(f"[DEBUG] Event metadata keys: {list(self.env.last_event.metadata.keys()) if self.env.last_event else 'no_event'}")
+                
+                # If still no frame, this indicates CloudRendering is still not working
+                raise ValueError("CloudRendering still returning None frames")
+                
+        except Exception as e:
+            print(f"[ERROR] Real rendering failed: {e}")
+            print(f"[FALLBACK] Using synthetic frames as backup")
             
-        # Apply the same cropping as in SPOC (6 pixels from each side)
-        nav_cutoff = round(nav_frame.shape[1] * 6 / 396)
-        manip_cutoff = round(manip_frame.shape[1] * 6 / 396)
+            # Fallback to synthetic frames if real rendering fails
+            import numpy as np
+            nav_frame = self._generate_synthetic_frame("navigation") 
+            manip_frame = self._generate_synthetic_frame("manipulation")
+            concatenated_frame = np.concatenate([nav_frame, manip_frame], axis=1)
+            pil_image = convert_numpy_to_PIL(concatenated_frame)
+            visual_description = self._analyze_visual_scene(pil_image)
         
-        if nav_cutoff > 0:
-            nav_frame = nav_frame[:, nav_cutoff:-nav_cutoff, :]
-        if manip_cutoff > 0:
-            manip_frame = manip_frame[:, manip_cutoff:-manip_cutoff, :]
-            
-        # Concatenate the two camera images side by side (like in SPOC)
-        concatenated_frame = np.concatenate([nav_frame, manip_frame], axis=1)
-        
-        # Convert concatenated frame to PIL Image
-        pil_image = convert_numpy_to_PIL(concatenated_frame)
-        
-        # Generate actual visual description from the PIL image
-        visual_description = self._analyze_visual_scene(pil_image)
-        
-        # For VLM, provide the concatenated image as a list (required by serialization)
+        # For VLM, provide the image as a list (required by serialization)
         multi_modal_data = {
-            img_placeholder: [pil_image]  # List containing the concatenated image
+            img_placeholder: [pil_image]
         }
         
         # Get current arm state
@@ -979,13 +830,12 @@ class SpocEnv(BaseEnv):
             add_example=False # in order to shorten the system prompt
         )
         
-        # Provide a more detailed system prompt for the complex SPOC task
+        # Provide a concise system prompt for the complex SPOC task
         spoc_system_prompt = (
-            "You are a helpful robot assistant controlling a Stretch robot in a household environment. "
-            "Your goal is to follow natural language instructions to complete tasks like fetching objects. "
-            "At each step, you will receive your arm's state (proprioception) and a visual image of your "
-            "surroundings. You must output a valid action from the provided list to control the robot. "
-            "Think step-by-step about how to decompose the task and select the best action."
+            "You are a Stretch robot in a household environment. Your task is to follow instructions to fetch objects. "
+            "IMPORTANT: Keep your responses concise. In <think> tags, write 1-2 sentences for observation, reasoning, and prediction. "
+            "In <answer> tags, provide only the action name(s). "
+            "Available actions: moveahead, moveback, rotateright, rotateleft, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, etc."
         )
         # spoc_system_prompt = (
         #     "You are an AI agent controlling a Stretch robot. Your ONLY task is to output actions to complete goals."

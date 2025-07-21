@@ -250,7 +250,31 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
     if not match:
         observation_content, reasoning_content, prediction_content, action_content, actions = "", "", "", "", []
         think_content = ""
-        print("[DEBUG PARSE] No match found - returning empty content")
+        print("[DEBUG PARSE] No match found - checking for fallback patterns...")
+        
+        # Fallback: Try to extract any action words from the response
+        fallback_actions = []
+        action_keywords = ['moveahead', 'moveback', 'rotateright', 'rotateleft', 'rotateright_small', 'rotateleft_small',
+                          'pickup', 'dropoff', 'move_arm_up', 'move_arm_down', 'move_arm_out', 'move_arm_in',
+                          'wrist_open', 'wrist_close', 'move_arm_up_small', 'move_arm_down_small', 
+                          'move_arm_out_small', 'move_arm_in_small']
+        
+        response_lower = response.lower()
+        for keyword in action_keywords:
+            if keyword in response_lower:
+                fallback_actions.append(keyword)
+                if len(fallback_actions) >= max_actions:
+                    break
+        
+        if fallback_actions:
+            actions = fallback_actions[:max_actions]
+            action_content = (', '.join(actions))
+            print(f"[DEBUG PARSE] Found fallback actions: {actions}")
+        else:
+            # Last resort: default to exploration action
+            actions = ['moveahead']
+            action_content = 'moveahead'
+            print("[DEBUG PARSE] Using default exploration action: moveahead")
     else:
         observation_content = match.group(1)
         reasoning_content = match.group(2)
