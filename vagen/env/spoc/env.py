@@ -48,6 +48,7 @@ class SpocEnv(BaseEnv):
         "move_arm_down_small": 18, # yms - move arm down 0.02m
         "move_arm_out_small": 19,  # zps - extend arm out 0.02m
         "move_arm_in_small": 20,   # zms - retract arm in 0.02m
+        "get_map": 21,             # Get topdown map view of environment
     }
 
     # Action descriptions for Stretch robot
@@ -72,6 +73,7 @@ class SpocEnv(BaseEnv):
         "Move the arm down by 0.02 meters",                    # move_arm_down_small
         "Extend the arm outward by 0.02 meters",               # move_arm_out_small
         "Retract the arm inward by 0.02 meters",               # move_arm_in_small
+        "Get a top-down map view showing room layout and object locations",  # get_map
     ]
 
     def __init__(self, config: SpocEnvConfig):
@@ -189,6 +191,9 @@ class SpocEnv(BaseEnv):
         self.action_history = []
         self.exploration_positions = set()
         self.last_pickup_attempt_step = -10  # Track pickup attempts
+        
+        # --- Map functionality ---
+        self.current_topdown_map = None  # Stores the last generated top-down map
         
         self.format_prompt_func = format_prompt[self.config.prompt_format]
         self.parse_func = PARSE_FUNC_MAP[self.config.prompt_format]
@@ -478,16 +483,96 @@ class SpocEnv(BaseEnv):
             18: {"action": "MoveArmRelative", "offset": {"x": 0, "y": -0.02, "z": 0}},
             19: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": 0.02}},
             20: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": -0.02}},
+            21: "get_map",  # Special case for map generation
         }
 
         params = action_map.get(action_index, {"action": "Pass"})
-        self._last_event = self.env.step(**params)
+        
+        # Handle special case for getting map
+        if params == "get_map":
+            self._generate_topdown_map()
+            # Create a pass action for the event system
+            self._last_event = self.env.step({"action": "Pass"})
+        else:
+            self._last_event = self.env.step(**params)
 
         # Update held status after pickup/dropoff attempts
         if params["action"] == "PickupObject" and self._last_event.metadata["lastActionSuccess"]:
             self.is_holding = True
         elif params["action"] == "ReleaseObject" and self._last_event.metadata["lastActionSuccess"]:
             self.is_holding = False
+
+    def _generate_topdown_map(self):
+        """Generate a top-down map view of the environment."""
+        try:
+            # Initialize third-party camera if not already done
+            if len(self.env.last_event.third_party_camera_frames) < 2:
+                event = self.env.step({"action": "GetMapViewCameraProperties"})
+                cam = event.metadata["actionReturn"].copy()
+                cam["orthographicSize"] += 1
+                self.env.step({"action": "AddThirdPartyCamera", "skyboxColor": "white", **cam})
+            
+            # Get current agent trajectory (just current position)
+            agent_pos = self.env.last_event.metadata["agent"]["position"]
+            agent_path = [agent_pos]
+            
+            # Get target object IDs if available
+            target_ids = []
+            if self.episode_data and self.episode_data.get("targetObjectType"):
+                target_type = self.episode_data["targetObjectType"]
+                # Find objects matching the target type
+                for obj in self.env.last_event.metadata.get("objects", []):
+                    obj_type = obj["objectType"]
+                    if target_type.lower() in obj_type.lower() or obj_type.lower() in target_type.lower():
+                        target_ids.append(obj["objectId"])
+            
+            # Create waypoints for targets
+            waypoints = []
+            for target_id in target_ids[:3]:  # Limit to first 3 targets
+                target_obj = None
+                for obj in self.env.last_event.metadata.get("objects", []):
+                    if obj["objectId"] == target_id:
+                        target_obj = obj
+                        break
+                
+                if target_obj:
+                    target_dict = {
+                        "position": target_obj["position"],
+                        "color": {"r": 1, "g": 0, "b": 0, "a": 1},
+                        "radius": 0.5,
+                        "text": "",
+                    }
+                    waypoints.append(target_dict)
+            
+            # Generate map with waypoints and agent path
+            if waypoints:
+                self.env.step({
+                    "action": "VisualizeWaypoints",
+                    "waypoints": waypoints,
+                })
+            
+            # Visualize agent path
+            event = self.env.step({"action": "VisualizePath", "positions": agent_path})
+            self.env.step({"action": "HideVisualizedPath"})
+            
+            # Get the generated top-down view
+            if len(event.third_party_camera_frames) > 0:
+                topdown_frame = event.third_party_camera_frames[-1]
+                
+                # Crop the frame (similar to SPOC's approach)
+                cutoff = round(topdown_frame.shape[1] * 6 / 396)
+                cropped_frame = topdown_frame[:, cutoff:-cutoff, :]
+                
+                # Store the map in the environment state
+                self.current_topdown_map = cropped_frame
+                print(f"[DEBUG MAP] Generated top-down map: shape={cropped_frame.shape}")
+            else:
+                print("[DEBUG MAP] Warning: No third-party camera frames available")
+                self.current_topdown_map = None
+                
+        except Exception as e:
+            print(f"[DEBUG MAP] Error generating top-down map: {e}")
+            self.current_topdown_map = None
 
     def measure_success(self):
         """
@@ -881,11 +966,29 @@ class SpocEnv(BaseEnv):
             img_placeholder: [pil_image]
         }
         
+        # Add top-down map if available
+        if hasattr(self, 'current_topdown_map') and self.current_topdown_map is not None:
+            try:
+                # Convert the map to PIL image
+                map_pil = convert_numpy_to_PIL(self.current_topdown_map)
+                # Add as a second image with specific placeholder
+                map_placeholder = getattr(self.config, "map_placeholder", "<map>")
+                multi_modal_data[map_placeholder] = [map_pil]
+                print(f"[DEBUG MAP] Added top-down map to observation: shape={self.current_topdown_map.shape}")
+            except Exception as e:
+                print(f"[DEBUG MAP] Failed to add map to observation: {e}")
+                self.current_topdown_map = None
+        
         # Get current arm state
         arm_state = self._get_arm_state()
         
         # Format the template with both visual description AND <image> placeholder for VLM
         visual_observation_text = f"{visual_description} {img_placeholder}"
+        
+        # Add map information if available
+        if hasattr(self, 'current_topdown_map') and self.current_topdown_map is not None:
+            map_placeholder = getattr(self.config, "map_placeholder", "<map>")
+            visual_observation_text += f" Top-down map: {map_placeholder}"
         
         if init_obs:
             obs_str = init_observation_template(
@@ -928,10 +1031,11 @@ class SpocEnv(BaseEnv):
         # Provide a concise system prompt for the complex SPOC task
         spoc_system_prompt = (
             "You are a Stretch robot in a household environment. Your task is to find and fetch specific objects. "
-            "STRATEGY: 1) Explore by moving forward/rotating until you see the target object. 2) When target is visible, approach it. 3) Extend arm and pickup the object. "
+            "STRATEGY: 1) Use 'get_map' to get spatial awareness of the environment. 2) Explore by moving forward/rotating until you see the target object. 3) When target is visible, approach it. 4) Extend arm and pickup the object. "
+            "MAP USAGE: Use 'get_map' action to obtain a top-down view showing room layout, objects (red markers), and your position. This helps with navigation planning and finding target objects efficiently. "
             "IMPORTANT: Keep responses concise. In <think> tags: observation (what you see), reasoning (what to do next), prediction (expected outcome). "
             "In <answer> tags: action name(s) only. "
-            "VALID ACTIONS ONLY: moveahead, moveback, rotateright, rotateleft, rotateright_small, rotateleft_small, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, wrist_open, wrist_close, move_arm_up_small, move_arm_down_small, move_arm_out_small, move_arm_in_small. "
+            "VALID ACTIONS ONLY: moveahead, moveback, rotateright, rotateleft, rotateright_small, rotateleft_small, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, wrist_open, wrist_close, move_arm_up_small, move_arm_down_small, move_arm_out_small, move_arm_in_small, get_map. "
             "DO NOT use: moveleft, moveright, or any other actions not listed above."
         )
         # spoc_system_prompt = (

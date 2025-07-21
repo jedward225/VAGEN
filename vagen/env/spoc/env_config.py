@@ -28,6 +28,7 @@ class SpocEnvConfig(BaseEnvConfig):
     max_actions_per_step: int = 3  # Increased from 1 to allow multi-step coordination
     action_sep: str = ','
     image_placeholder: str = "<image>"
+    map_placeholder: str = "<map>"
     special_token_list: List[str] = field(default_factory=lambda: ["<pad>", "<s>", "</s>", "<unk>", "<mask>"])
     
     # === Reward Configuration ===

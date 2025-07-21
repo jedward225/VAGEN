@@ -176,7 +176,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.name=vllm \\
     actor_rollout_ref.rollout.gpu_memory_utilization=0.25 \\
     actor_rollout_ref.rollout.max_num_seqs=4 \\
-    actor_rollout_ref.rollout.max_model_len=90000 \\
+    actor_rollout_ref.rollout.max_model_len=4096 \\
     actor_rollout_ref.rollout.max_num_batched_tokens=4096 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=True \\
