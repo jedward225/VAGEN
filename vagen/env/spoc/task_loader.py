@@ -100,8 +100,31 @@ class ChoresDataset:
         return 1
 
     def _find_episodes(self):
-        """Find all HDF5 files and index the episodes within them."""
-        # Try with split directory first, then fallback to task_type directory only
+        """Find JSON files and load episodes from them."""
+        # First try to find JSON files based on split name
+        json_path = os.path.join(self.data_path, f"{self.split}.json")
+        
+        if os.path.exists(json_path):
+            # Load from JSON file
+            print(f"Loading episodes from JSON file: {json_path}")
+            try:
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+                    
+                tasks = data.get('tasks', [])
+                for i, task in enumerate(tasks):
+                    self.episodes.append({
+                        "json_data": task,
+                        "episode_index": i,
+                        "type": "json"
+                    })
+                print(f"Loaded {len(tasks)} episodes from JSON")
+                return
+            except Exception as e:
+                print(f"Error loading JSON file {json_path}: {e}")
+        
+        # Fallback to original HDF5 logic if JSON not found
+        print(f"JSON file not found at {json_path}, trying HDF5 fallback...")
         search_paths = [
             os.path.join(self.data_path, self.task_type, self.split, "**", "hdf5_sensors.hdf5"),
             os.path.join(self.data_path, self.task_type, "**", "hdf5_sensors.hdf5"),
@@ -127,7 +150,8 @@ class ChoresDataset:
                         # We will check the task_type inside __getitem__ after loading
                         self.episodes.append({
                             "hdf5_path": hdf5_path,
-                            "episode_key": episode_key
+                            "episode_key": episode_key,
+                            "type": "hdf5"
                         })
             except Exception as e:
                 print(f"Warning: Could not read or process {hdf5_path}. Error: {e}")
@@ -138,65 +162,83 @@ class ChoresDataset:
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """
-        Loads a single episode's data from the HDF5 file.
-        This final version correctly constructs the scene_name from 'house_index'.
+        Loads a single episode's data from either JSON or HDF5 format.
         """
         episode_info = self.episodes[idx]
         
-        with h5py.File(episode_info["hdf5_path"], 'r') as f:
-            episode_group = f[episode_info["episode_key"]]
-            # 1. Read the house_index (it's usually a single-element array)
-            try:
-                house_index = episode_group['house_index'][0]
-            except KeyError:
-                print(f"FATAL: 'house_index' key not found for episode {episode_info['episode_key']}. Cannot determine scene.")
-                # Returning a dummy that will likely fail, to avoid a hard crash
-                house_index = 0 
+        if episode_info.get("type") == "json":
+            # Handle JSON data format
+            task_data = episode_info["json_data"]
             
-            # 2. Construct the correct scene name string from the index
-            # Map SPOC's large house_index to ai2thor v5.0.0's supported FloorPlan1-430 range
-            mapped_scene_index = self._map_house_index_to_scene(house_index)
-            scene_name = f"FloorPlan{mapped_scene_index}_physics"
-
-            # 3. Load and process the task spec JSON to get the instruction
-            task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()
-            full_str = task_spec_bytes.decode('utf-8', errors='ignore')
-            start_idx = full_str.find('{')
-            open_braces = 0
-            end_idx = -1
-            if start_idx != -1:
-                for i, char in enumerate(full_str[start_idx:]):
-                    if char == '{': open_braces += 1
-                    elif char == '}': open_braces -= 1
-                    if open_braces == 0:
-                        end_idx = start_idx + i
-                        break
-            
-            if end_idx == -1:
-                raise ValueError(f"Corrupted JSON in episode {episode_info['episode_key']}")
-            
-            task_spec_json_str = full_str[start_idx : end_idx + 1]
-            task_spec_data = json.loads(task_spec_json_str)
-            processed_task_spec = json_templated_to_NL_spec(task_spec_data)
-            
-            # 4. Extract the initial agent pose
-            initial_pose_data = episode_group["last_agent_location"][0]
-            agent_pose = {
-                "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
-                "rotation": initial_pose_data[3],
-                "horizon": initial_pose_data[4],
-            }
-            
-            # 5. Extract target object info
-            target_object_type = processed_task_spec.get("objectName", None)
-
-            # 6. Assemble the final, CORRECT data dictionary
             return {
-                "instruction": processed_task_spec['instruction'],
-                "scene": scene_name,  # <-- Use the correctly constructed scene_name
-                "agentPose": agent_pose,
-                "targetObjectType": target_object_type,
+                "instruction": task_data.get("instruction", "Navigate to the target object"),
+                "scene": task_data.get("scene", "FloorPlan1"),
+                "agentPose": task_data.get("agentPose", {
+                    "position": {"x": 0.0, "y": 0.9, "z": 0.0},
+                    "rotation": 0.0,
+                    "horizon": 0.0
+                }),
+                "targetObjectType": task_data.get("targetObjectType", None),
+                "target_position": task_data.get("target_position", None),
+                "targetObjectIds": task_data.get("targetObjectIds", None),
+                "object_to_hide": task_data.get("object_to_hide", [])
             }
+        else:
+            # Handle HDF5 data format (original code)
+            with h5py.File(episode_info["hdf5_path"], 'r') as f:
+                episode_group = f[episode_info["episode_key"]]
+                # 1. Read the house_index (it's usually a single-element array)
+                try:
+                    house_index = episode_group['house_index'][0]
+                except KeyError:
+                    print(f"FATAL: 'house_index' key not found for episode {episode_info['episode_key']}. Cannot determine scene.")
+                    # Returning a dummy that will likely fail, to avoid a hard crash
+                    house_index = 0 
+                
+                # 2. Construct the correct scene name string from the index
+                # Map SPOC's large house_index to ai2thor v5.0.0's supported FloorPlan1-430 range
+                mapped_scene_index = self._map_house_index_to_scene(house_index)
+                scene_name = f"FloorPlan{mapped_scene_index}_physics"
+
+                # 3. Load and process the task spec JSON to get the instruction
+                task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()
+                full_str = task_spec_bytes.decode('utf-8', errors='ignore')
+                start_idx = full_str.find('{')
+                open_braces = 0
+                end_idx = -1
+                if start_idx != -1:
+                    for i, char in enumerate(full_str[start_idx:]):
+                        if char == '{': open_braces += 1
+                        elif char == '}': open_braces -= 1
+                        if open_braces == 0:
+                            end_idx = start_idx + i
+                            break
+                
+                if end_idx == -1:
+                    raise ValueError(f"Corrupted JSON in episode {episode_info['episode_key']}")
+                
+                task_spec_json_str = full_str[start_idx : end_idx + 1]
+                task_spec_data = json.loads(task_spec_json_str)
+                processed_task_spec = json_templated_to_NL_spec(task_spec_data)
+                
+                # 4. Extract the initial agent pose
+                initial_pose_data = episode_group["last_agent_location"][0]
+                agent_pose = {
+                    "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
+                    "rotation": initial_pose_data[3],
+                    "horizon": initial_pose_data[4],
+                }
+                
+                # 5. Extract target object info
+                target_object_type = processed_task_spec.get("objectName", None)
+
+                # 6. Assemble the final, CORRECT data dictionary
+                return {
+                    "instruction": processed_task_spec['instruction'],
+                    "scene": scene_name,  # <-- Use the correctly constructed scene_name
+                    "agentPose": agent_pose,
+                    "targetObjectType": target_object_type,
+                }
 
 def get_dataset(data_path: str, task_type: str, split: str) -> ChoresDataset:
     """Factory function to get the dataset instance."""

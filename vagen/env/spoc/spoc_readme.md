@@ -22,7 +22,7 @@ pip install -r requirements.txt
 pip install --extra-index-url https://ai2thor-pypi.allenai.org ai2thor==0+5d0ab8ab8760eb584c5ae659c2b2b951cab23246
 
 pip install h5py
-
+pip install objathor
 cd ../
 
 git clone https://github.com/JamesKrW/verl.git
@@ -33,13 +33,25 @@ cd ../
 git clone https://github.com/jedward225/VAGEN.git
 cd VAGEN
 bash scripts/install.sh
-
-sudo apt-get update -y && sudo apt-get install -y vulkan-tools mesa-vulkan-drivers
-sudo apt-get install -y vulkan-tools libvulkan1 vulkan-utils
+sudo apt-get update
+sudo apt-get install -y vulkan-utils libvulkan1 mesa-vulkan-drivers
 sudo apt-get install -y xvfb mesa-utils
 sudo apt install net-tools
 sudo apt-get install -y libvulkan1
 sudo apt install x11-apps
+sudo apt install xvfb -y
+
+python -c 'from transformers import AutoTokenizer, AutoModel;
+AutoTokenizer.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct");
+AutoModel.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct")
+from transformers import AutoImageProcessor; 
+AutoImageProcessor.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct")'
+
+
+export SPOC_DATA_PATH=/root/spoc_data/fifteen
+export FORCE_HEADLESS=1
+export AI2THOR_ALLOW_RESOLUTION_MISMATCH=1
+./quick_restart.sh
 ```
 
 ## Technical Architecture
