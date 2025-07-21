@@ -504,47 +504,14 @@ class SpocEnv(BaseEnv):
             self.is_holding = False
 
     def _generate_topdown_map(self):
-        """Generate a REAL top-down map view of the environment."""
+        """Generate a top-down map view of the environment."""
         try:
-            # Get scene bounds to position camera properly
-            scene_metadata = self.env.last_event.metadata
-            agent_pos = scene_metadata["agent"]["position"]
-            
-            # Calculate proper camera height - MUCH higher than before
-            camera_height = 8.0  # High above the scene for true bird's eye view
-            
-            # Remove any existing third party cameras
-            for i in range(5):  # Clear up to 5 potential cameras
-                try:
-                    self.env.step({"action": "UpdateThirdPartyCamera", 
-                                  "thirdPartyCameraId": i,
-                                  "position": {"x": 0, "y": -100, "z": 0}})  # Move out of view
-                except:
-                    pass
-            
-            # Add new camera positioned HIGH ABOVE the agent for TRUE top-down view
-            # Using the correct AI2-THOR API parameters
-            camera_setup = {
-                "action": "AddThirdPartyCamera",
-                "position": {
-                    "x": agent_pos["x"], 
-                    "y": agent_pos["y"] + camera_height,  # HIGH above agent
-                    "z": agent_pos["z"]
-                },
-                "rotation": {"x": 90, "y": 0, "z": 0},  # Looking straight down
-                "fieldOfView": 90,  # Wide field of view
-                "orthographic": True,  # Orthographic projection for map-like view
-                "orthographicSize": 5.0,  # Coverage area
-                "skyboxColor": "white"
-            }
-            
-            print(f"[DEBUG MAP] Creating TRUE top-down camera at height {camera_height}m above agent")
-            print(f"[DEBUG MAP] Camera position: ({agent_pos['x']:.2f}, {agent_pos['y'] + camera_height:.2f}, {agent_pos['z']:.2f})")
-            
-            camera_result = self.env.step(camera_setup)
-            if not camera_result.metadata["lastActionSuccess"]:
-                print(f"[DEBUG MAP] Failed to add camera: {camera_result.metadata.get('errorMessage', 'Unknown error')}")
-                return
+            # Initialize third-party camera if not already done
+            if len(self.env.last_event.third_party_camera_frames) < 2:
+                event = self.env.step({"action": "GetMapViewCameraProperties"})
+                cam = event.metadata["actionReturn"].copy()
+                cam["orthographicSize"] += 1
+                self.env.step({"action": "AddThirdPartyCamera", "skyboxColor": "white", **cam})
             
             # Get current agent trajectory (just current position)
             agent_pos = self.env.last_event.metadata["agent"]["position"]
@@ -585,24 +552,23 @@ class SpocEnv(BaseEnv):
                     "waypoints": waypoints,
                 })
             
-            # Force a frame update with our high camera
-            frame_event = self.env.step({"action": "Pass"})  # Simple pass to get current frame
+            # Visualize agent path
+            event = self.env.step({"action": "VisualizePath", "positions": agent_path})
+            self.env.step({"action": "HideVisualizedPath"})
             
-            # Get the frame from our HIGH camera (should be index 0)
-            if len(frame_event.third_party_camera_frames) > 0:
-                # Get the first camera frame (our high orthographic camera)
-                topdown_frame = frame_event.third_party_camera_frames[0]
+            # Get the generated top-down view
+            if len(event.third_party_camera_frames) > 0:
+                topdown_frame = event.third_party_camera_frames[-1]
                 
-                print(f"[DEBUG MAP] Captured TRUE top-down map frame: shape={topdown_frame.shape}")
-                print(f"[DEBUG MAP] This is from {camera_height}m above the agent")
-                print(f"[DEBUG MAP] Camera looking straight down with orthographic projection")
+                # Crop the frame (similar to SPOC's approach)
+                cutoff = round(topdown_frame.shape[1] * 6 / 396)
+                cropped_frame = topdown_frame[:, cutoff:-cutoff, :]
                 
-                # Store the map
-                self.current_topdown_map = topdown_frame
-                print(f"[DEBUG MAP] Successfully generated REAL bird's-eye view map")
+                # Store the map in the environment state
+                self.current_topdown_map = cropped_frame
+                print(f"[DEBUG MAP] Generated top-down map: shape={cropped_frame.shape}")
             else:
-                print("[DEBUG MAP] ERROR: No third-party camera frames available")
-                print("[DEBUG MAP] Camera setup might have failed")
+                print("[DEBUG MAP] Warning: No third-party camera frames available")
                 self.current_topdown_map = None
                 
         except Exception as e:
