@@ -50,8 +50,12 @@ def convert_numpy_to_PIL(numpy_array: np.ndarray) -> Image.Image:
     if numpy_array.shape[-1] == 3:
         # Convert numpy array to RGB PIL Image
         return Image.fromarray(numpy_array, mode='RGB')
+    elif numpy_array.shape[-1] == 4:
+        # Handle RGBA images - convert to RGB by dropping alpha channel
+        rgb_array = numpy_array[:, :, :3]
+        return Image.fromarray(rgb_array, mode='RGB')
     else:
-        raise ValueError(f"Unsupported number of channels: {numpy_array.shape[-1]}. Expected 3 (RGB).")
+        raise ValueError(f"Unsupported number of channels: {numpy_array.shape[-1]}. Expected 3 (RGB) or 4 (RGBA).")
 
 
 
