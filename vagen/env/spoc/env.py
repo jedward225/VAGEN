@@ -506,25 +506,32 @@ class SpocEnv(BaseEnv):
     def _generate_topdown_map(self):
         """Generate a top-down map view of the environment."""
         try:
-            # 获取当前agent位置
-            agent_pos = self.env.last_event.metadata["agent"]["position"]
+            # 强制刷新场景状态
+            scene_name = self.env.last_event.metadata.get("sceneName", "unknown")
+            print(f"[DEBUG MAP] 当前场景: {scene_name}")
             
-            # 手动创建相机，位置在agent正上方
-            camera_config = {
-                "action": "AddThirdPartyCamera",
-                "position": {
-                    "x": agent_pos["x"],
-                    "y": agent_pos["y"] + 5.0,  # agent上方5米
-                    "z": agent_pos["z"]
-                },
-                "rotation": {"x": 90, "y": 0, "z": 0},  # 垂直向下看
-                "orthographic": True,
-                "orthographicSize": 3.0,
-                "skyboxColor": "white"
-            }
-            
-            print(f"[DEBUG MAP] 在agent位置({agent_pos['x']:.2f}, {agent_pos['z']:.2f})上方5米创建相机")
-            camera_event = self.env.step(camera_config)
+            # 使用GetMapViewCameraProperties但确保它基于当前场景
+            event = self.env.step({"action": "GetMapViewCameraProperties"})
+            if event.metadata["lastActionSuccess"]:
+                cam = event.metadata["actionReturn"].copy()
+                
+                # 获取当前agent位置并调整相机位置到当前场景
+                agent_pos = self.env.last_event.metadata["agent"]["position"]
+                
+                # 修改相机配置以匹配当前场景
+                if "position" in cam:
+                    cam["position"]["x"] = agent_pos["x"]
+                    cam["position"]["z"] = agent_pos["z"]
+                    cam["position"]["y"] = agent_pos["y"] + 5.0  # agent上方5米
+                
+                cam["orthographicSize"] = cam.get("orthographicSize", 5.0) + 1
+                cam["skyboxColor"] = "white"
+                
+                print(f"[DEBUG MAP] 调整相机到当前agent位置: ({agent_pos['x']:.2f}, {agent_pos['z']:.2f})")
+                self.env.step({"action": "AddThirdPartyCamera", **cam})
+            else:
+                print("[DEBUG MAP] GetMapViewCameraProperties失败，使用手动配置")
+                return
             
             # Get current agent trajectory (just current position)
             agent_pos = self.env.last_event.metadata["agent"]["position"]
