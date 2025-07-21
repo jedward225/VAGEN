@@ -506,12 +506,25 @@ class SpocEnv(BaseEnv):
     def _generate_topdown_map(self):
         """Generate a top-down map view of the environment."""
         try:
-            # Initialize third-party camera if not already done
-            if len(self.env.last_event.third_party_camera_frames) < 2:
-                event = self.env.step({"action": "GetMapViewCameraProperties"})
-                cam = event.metadata["actionReturn"].copy()
-                cam["orthographicSize"] += 1
-                self.env.step({"action": "AddThirdPartyCamera", "skyboxColor": "white", **cam})
+            # 获取当前agent位置
+            agent_pos = self.env.last_event.metadata["agent"]["position"]
+            
+            # 手动创建相机，位置在agent正上方
+            camera_config = {
+                "action": "AddThirdPartyCamera",
+                "position": {
+                    "x": agent_pos["x"],
+                    "y": agent_pos["y"] + 5.0,  # agent上方5米
+                    "z": agent_pos["z"]
+                },
+                "rotation": {"x": 90, "y": 0, "z": 0},  # 垂直向下看
+                "orthographic": True,
+                "orthographicSize": 3.0,
+                "skyboxColor": "white"
+            }
+            
+            print(f"[DEBUG MAP] 在agent位置({agent_pos['x']:.2f}, {agent_pos['z']:.2f})上方5米创建相机")
+            camera_event = self.env.step(camera_config)
             
             # Get current agent trajectory (just current position)
             agent_pos = self.env.last_event.metadata["agent"]["position"]
@@ -552,23 +565,18 @@ class SpocEnv(BaseEnv):
                     "waypoints": waypoints,
                 })
             
-            # Visualize agent path
-            event = self.env.step({"action": "VisualizePath", "positions": agent_path})
-            self.env.step({"action": "HideVisualizedPath"})
+            # 获取相机画面
+            frame_event = self.env.step({"action": "Pass"})
             
-            # Get the generated top-down view
-            if len(event.third_party_camera_frames) > 0:
-                topdown_frame = event.third_party_camera_frames[-1]
+            if len(frame_event.third_party_camera_frames) > 0:
+                topdown_frame = frame_event.third_party_camera_frames[0]  # 使用我们创建的相机
                 
-                # Crop the frame (similar to SPOC's approach)
-                cutoff = round(topdown_frame.shape[1] * 6 / 396)
-                cropped_frame = topdown_frame[:, cutoff:-cutoff, :]
+                print(f"[DEBUG MAP] 成功获取当前场景俯视图: shape={topdown_frame.shape}")
                 
-                # Store the map in the environment state
-                self.current_topdown_map = cropped_frame
-                print(f"[DEBUG MAP] Generated top-down map: shape={cropped_frame.shape}")
+                # 存储俯视图
+                self.current_topdown_map = topdown_frame
             else:
-                print("[DEBUG MAP] Warning: No third-party camera frames available")
+                print("[DEBUG MAP] 错误：无法获取相机画面")
                 self.current_topdown_map = None
                 
         except Exception as e:
