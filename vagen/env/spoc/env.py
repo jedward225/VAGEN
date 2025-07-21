@@ -498,9 +498,9 @@ class SpocEnv(BaseEnv):
             self._last_event = self.env.step(**params)
 
         # Update held status after pickup/dropoff attempts
-        if params["action"] == "PickupObject" and self._last_event.metadata["lastActionSuccess"]:
+        if isinstance(params, dict) and params["action"] == "PickupObject" and self._last_event.metadata["lastActionSuccess"]:
             self.is_holding = True
-        elif params["action"] == "ReleaseObject" and self._last_event.metadata["lastActionSuccess"]:
+        elif isinstance(params, dict) and params["action"] == "ReleaseObject" and self._last_event.metadata["lastActionSuccess"]:
             self.is_holding = False
 
     def _generate_topdown_map(self):
