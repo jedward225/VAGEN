@@ -626,24 +626,63 @@ class SpocEnv(BaseEnv):
         else:
             reward_breakdown['pickup_attempt'] = 0.0
             
-        # 9. Enhanced target visibility and proximity rewards
+        # 9. Enhanced target visibility and proximity rewards with debugging
         try:
             objects = self.env.last_event.metadata.get("objects", [])
             target_type = self.episode_data.get("targetObjectType") if self.episode_data else None
+            
+            # DEBUG: Print scene objects every 10 steps to understand what's available
+            if self._current_step % 10 == 0 and target_type:
+                visible_objects = [obj["objectType"] for obj in objects if obj.get("visible", False)]
+                all_objects = [obj["objectType"] for obj in objects]
+                print(f"[DEBUG OBJECTS] Step {self._current_step}, Target: '{target_type}'")
+                print(f"[DEBUG OBJECTS] Visible objects: {visible_objects[:10]}")  # Show first 10
+                print(f"[DEBUG OBJECTS] All objects: {all_objects[:10]}")  # Show first 10
+                
+                # Check for partial matches
+                target_matches = []
+                for obj in objects:
+                    obj_type = obj["objectType"].lower()
+                    if target_type.lower() in obj_type or obj_type in target_type.lower():
+                        target_matches.append(obj["objectType"])
+                if target_matches:
+                    print(f"[DEBUG OBJECTS] Potential target matches: {target_matches}")
+            
             if target_type:
                 agent_pos = self.env.last_event.metadata["agent"]["position"]
                 target_visible = False
                 target_visible_in_manip = False
                 closest_distance = float('inf')
                 
+                # Try multiple matching strategies
                 for obj in objects:
-                    if obj.get("visible", False) and obj["objectType"].startswith(target_type):
+                    if not obj.get("visible", False):
+                        continue
+                        
+                    obj_type = obj["objectType"]
+                    is_target = False
+                    
+                    # Strategy 1: Exact startswith match
+                    if obj_type.startswith(target_type):
+                        is_target = True
+                    # Strategy 2: Case-insensitive contains
+                    elif target_type.lower() in obj_type.lower():
+                        is_target = True
+                    # Strategy 3: Reverse contains (target contains obj_type)
+                    elif obj_type.lower() in target_type.lower():
+                        is_target = True
+                    # Strategy 4: WordNet synset matching (for SPOC compatibility)
+                    elif any(word in obj_type.lower() for word in target_type.lower().split()):
+                        is_target = True
+                    
+                    if is_target:
                         target_visible = True
                         obj_distance = math.sqrt(
                             (agent_pos["x"] - obj["position"]["x"])**2 +
                             (agent_pos["z"] - obj["position"]["z"])**2
                         )
                         closest_distance = min(closest_distance, obj_distance)
+                        print(f"[DEBUG MATCH] Found target match: '{obj_type}' for target '{target_type}', distance: {obj_distance:.2f}m")
                         
                         if obj_distance < 1.5:  # Close enough to be in manipulation view
                             target_visible_in_manip = True
@@ -653,7 +692,7 @@ class SpocEnv(BaseEnv):
                     visibility_reward = 2.0
                     reward += visibility_reward
                     reward_breakdown['target_visible'] = visibility_reward
-                    print(f"[REWARD] TARGET VISIBLE! Distance: {closest_distance:.2f}m, Reward: +{visibility_reward}")
+                    print(f"[REWARD] 🎯 TARGET VISIBLE! Distance: {closest_distance:.2f}m, Reward: +{visibility_reward}")
                 else:
                     reward_breakdown['target_visible'] = 0.0
                 
@@ -662,13 +701,14 @@ class SpocEnv(BaseEnv):
                     manip_view_reward = 3.0  # Increased reward
                     reward += manip_view_reward
                     reward_breakdown['manipulation_view'] = manip_view_reward
-                    print(f"[REWARD] TARGET IN REACH! Reward: +{manip_view_reward}")
+                    print(f"[REWARD] 🚀 TARGET IN REACH! Reward: +{manip_view_reward}")
                 else:
                     reward_breakdown['manipulation_view'] = 0.0
             else:
                 reward_breakdown['target_visible'] = 0.0
                 reward_breakdown['manipulation_view'] = 0.0
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Error in target detection: {e}")
             reward_breakdown['target_visible'] = 0.0
             reward_breakdown['manipulation_view'] = 0.0
             
@@ -891,7 +931,8 @@ class SpocEnv(BaseEnv):
             "STRATEGY: 1) Explore by moving forward/rotating until you see the target object. 2) When target is visible, approach it. 3) Extend arm and pickup the object. "
             "IMPORTANT: Keep responses concise. In <think> tags: observation (what you see), reasoning (what to do next), prediction (expected outcome). "
             "In <answer> tags: action name(s) only. "
-            "Actions: moveahead, moveback, rotateright, rotateleft, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in."
+            "VALID ACTIONS ONLY: moveahead, moveback, rotateright, rotateleft, rotateright_small, rotateleft_small, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, wrist_open, wrist_close, move_arm_up_small, move_arm_down_small, move_arm_out_small, move_arm_in_small. "
+            "DO NOT use: moveleft, moveright, or any other actions not listed above."
         )
         # spoc_system_prompt = (
         #     "You are an AI agent controlling a Stretch robot. Your ONLY task is to output actions to complete goals."
