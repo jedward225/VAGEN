@@ -25,13 +25,13 @@ class SpocEnvConfig(BaseEnvConfig):
     
     # === Prompt and Action Configuration ===
     prompt_format: str = "grounding_worldmodeling"
-    max_actions_per_step: int = 1
+    max_actions_per_step: int = 3  # Increased from 1 to allow multi-step coordination
     action_sep: str = ','
     image_placeholder: str = "<image>"
     special_token_list: List[str] = field(default_factory=lambda: ["<pad>", "<s>", "</s>", "<unk>", "<mask>"])
     
     # === Reward Configuration ===
-    format_reward: float = 1.0
+    format_reward: float = 1.0  # Will be reduced to 0.1 in new reward system
     use_state_reward: bool = False
     max_objects_in_state: int = 10
     

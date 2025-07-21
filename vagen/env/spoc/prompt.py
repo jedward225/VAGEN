@@ -4,22 +4,32 @@ FORMAT_CONFIGS = {
     "free_think": {
         "description": "You should first give your thought process, and then your answer.",
         "format": "<think>...</think><answer>...</answer>",
-        "example": """<think>Navigation view: I can see the target mug on the kitchen counter ahead. Manipulation view: The counter surface is visible but the mug is not yet in my manipulation range. Arm state: retracted (z=0.0m, y=0.8m), wrist=0°, empty gripper. I need to navigate closer first, then extend my arm to pick it up.</think><answer>moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
+        "example": """<think>Navigation view: I can see the target mug on the kitchen counter ahead. Manipulation view: The counter surface is visible but the mug is not yet in my manipulation range. Arm state: retracted (z=0.0m, y=0.8m), wrist=0°, empty gripper. I need to navigate closer first, then extend my arm to pick it up.</think><answer>moveahead{action_sep}move_arm_out{action_sep}pickup</answer>
+
+Alternative: <think>Navigation view: I see a book on a table to my right. Manipulation view: Table not visible yet. Arm state: retracted, empty. I need to turn right first, then approach and pick up.</think><answer>rotateright{action_sep}moveahead{action_sep}pickup</answer>"""
     },
     "no_think": {
         "description": "You should provide only your answer.",
         "format": "<answer>...</answer>",
-        "example": """<answer>moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
+        "example": """<answer>moveahead{action_sep}move_arm_out{action_sep}pickup</answer>
+
+Alternative examples:
+<answer>rotateright{action_sep}moveahead{action_sep}pickup</answer>
+<answer>moveahead{action_sep}move_arm_down{action_sep}pickup</answer>"""
     },
     "grounding": {
         "description": "You should first give your thought process with your observation and reasoning, and finally your answer.\nThe observation should describe what you see in both navigation and manipulation views, and include your arm state.",
         "format": "<think><observation>...</observation><reasoning>...</reasoning></think><answer>...</answer>",
-        "example": """<think><observation>Navigation view: I am in a kitchen. There is a counter to my left, a sink ahead, and a dining table to my right. The target mug appears to be on the dining table. Manipulation view: The table surface is visible but the mug is not yet in my manipulation range. Arm state: My arm is currently retracted (z=0.0m, y=0.8m), wrist angle is 0°, gripper is empty and not holding anything.</observation><reasoning>I need to move toward the dining table to get the mug within my manipulation range. I'll turn right and move forward to approach the table, then extend my arm to reach the mug.</reasoning></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out</answer>"""
+        "example": """<think><observation>Navigation view: I am in a kitchen. There is a counter to my left, a sink ahead, and a dining table to my right. The target mug appears to be on the dining table. Manipulation view: The table surface is visible but the mug is not yet in my manipulation range. Arm state: My arm is currently retracted (z=0.0m, y=0.8m), wrist angle is 0°, gripper is empty and not holding anything.</observation><reasoning>I need to move toward the dining table to get the mug within my manipulation range. I'll turn right and move forward to approach the table, then extend my arm to reach the mug.</reasoning></think><answer>rotateright{action_sep}moveahead{action_sep}move_arm_out</answer>
+
+Alternative: <think><observation>Navigation view: I'm in a bedroom. I can see a phone on the nightstand directly ahead. Manipulation view: The nightstand edge is visible but phone is not in range. Arm state: Retracted (z=0.0m, y=0.8m), wrist 0°, gripper empty.</observation><reasoning>The phone is straight ahead on the nightstand. I just need to move closer and extend my arm to pick it up.</reasoning></think><answer>moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
     },
     "worldmodeling": {
         "description": "You should first give your thought process with reasoning and prediction of next state, then your answer.\nThe prediction should describe what you expect to see in both cameras and your arm state after actions.",
         "format": "<think><reasoning>...</reasoning><prediction>...</prediction></think><answer>...</answer>",
-        "example": """<think><reasoning>I can see the target mug on the table through my navigation view. I need to get closer to it and position my arm properly for grasping. My manipulation view will show the mug clearly once I'm in range.</reasoning><prediction>Navigation view: I will be standing next to the dining table with the mug clearly visible. Manipulation view: The mug will be prominently displayed in the center of my view, within grasping distance. Arm state: My arm will be extended outward (z=0.2m, y=0.8m), wrist positioned for optimal grasping, gripper ready to close around the mug.</prediction></think><answer>rotateright{action_sep}moveahead{action_sep}moveahead{action_sep}move_arm_out{action_sep}move_arm_out</answer>"""
+        "example": """<think><reasoning>I can see the target mug on the table through my navigation view. I need to get closer to it and position my arm properly for grasping. My manipulation view will show the mug clearly once I'm in range.</reasoning><prediction>Navigation view: I will be standing next to the dining table with the mug clearly visible. Manipulation view: The mug will be prominently displayed in the center of my view, within grasping distance. Arm state: My arm will be extended outward (z=0.2m, y=0.8m), wrist positioned for optimal grasping, gripper ready to close around the mug.</prediction></think><answer>rotateright{action_sep}moveahead{action_sep}move_arm_out</answer>
+
+Alternative: <think><reasoning>The target apple is on the counter directly ahead. I can see it in my navigation view but need to get closer for manipulation. Once I approach and extend my arm, it should be within pickup range.</reasoning><prediction>Navigation view: I'll be positioned at the counter with the apple clearly visible. Manipulation view: The apple will be prominently displayed and within arm's reach. Arm state: Extended outward (z=0.1m, y=0.8m) and ready to grasp the apple.</prediction></think><answer>moveahead{action_sep}move_arm_out{action_sep}pickup</answer>"""
     },
     "grounding_worldmodeling": {
         "description": "You should first give your thought process with your observation, reasoning, and prediction of next state, then your answer.\nInclude both camera views and arm proprioception in observation and prediction.",
@@ -99,7 +109,7 @@ Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 Round 4:
 Env_feedback: Success"""
     elif selected_format == "grounding_worldmodeling":
-        example=f"""Example:
+        example=f"""Example 1 - Basic Fetch:
 Round 1:
 Visual Observation: [Dual camera view]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
@@ -111,14 +121,32 @@ Visual Observation: [Dual camera view]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <think><observation>Navigation view: I am now positioned optimally at the counter with the mug clearly visible ahead. Manipulation view: The mug is now prominently displayed in my manipulation view and appears to be within reach of my arm. Arm state: My arm remains retracted (z=0.0m, y=0.8m), wrist at neutral position (0°), gripper empty and ready for pickup action.</observation><reasoning>The mug is now within my manipulation range. I need to extend my arm outward to reach the mug's position and then execute a pickup action to secure the object.</reasoning><prediction>Navigation view: I will maintain my position at the counter while successfully holding the target mug. Manipulation view: The mug will be securely grasped and clearly visible in my gripper. Arm state: My arm will be extended outward (z=0.2m, y=0.8m) with the mug firmly held in my gripper, task completed.</prediction></think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
-Round 3:
+
+Example 2 - Object to the Right:
+Round 1:
+Visual Observation: [Dual camera view]
+Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
+<think><observation>Navigation view: I'm in a living room. I can see a remote control on a table to my right side. Manipulation view: The table is not visible yet in my manipulation view. Arm state: Arm retracted (z=0.0m, y=0.8m), wrist neutral (0°), gripper empty.</observation><reasoning>The target object is to my right. I need to turn right to face it directly before approaching.</reasoning><prediction>Navigation view: I will be facing the table with the remote control directly ahead. Manipulation view: The table edge will become visible. Arm state: Unchanged, still retracted and ready.</prediction></think>
+<answer>rotateright</answer>
+Round 2:
 Env_feedback: Last action is executed successfully.
 Visual Observation: [Dual camera view]
-Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
-<think><observation>Navigation view: I am positioned at the counter and successfully holding the target coffee mug as intended. Manipulation view: The mug is securely grasped in my gripper and clearly visible, confirming successful task completion. Arm state: My arm is extended outward (z=0.2m, y=0.8m), wrist at neutral position, and gripper is successfully holding the target mug.</observation><reasoning>Perfect! I have successfully completed the manipulation task. The target object is now securely in my possession, fulfilling the task requirements.</reasoning><prediction>Task completed successfully. I will maintain this position with the mug securely held, ready for task completion confirmation or any subsequent instructions.</prediction></think>
-<answer>Task completed - mug successfully retrieved</answer>
-Round 4:
-Env_feedback: Success"""
+Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
+<think><observation>Navigation view: Perfect! Now I'm facing the table directly and can see the remote control clearly ahead. Manipulation view: I can see the table edge but need to get closer. Arm state: Still retracted and ready.</observation><reasoning>Now I need to approach the table to get the remote within manipulation range.</reasoning><prediction>Navigation view: I'll be standing close to the table with the remote clearly visible. Manipulation view: The remote will be visible and within arm's reach. Arm state: Ready to extend for pickup.</prediction></think>
+<answer>moveahead, move_arm_out, pickup</answer>
+
+Example 3 - Object on High Surface:
+Round 1:
+Visual Observation: [Dual camera view] 
+Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
+<think><observation>Navigation view: I'm near a bookshelf. The target book is on a higher shelf, above my current arm height. Manipulation view: I can see the lower shelves but the book is not in range. Arm state: Retracted (z=0.0m, y=0.8m), needs to go higher.</observation><reasoning>The book is on a high shelf. I need to get closer first, then extend my arm outward and upward to reach it.</reasoning><prediction>Navigation view: I'll be closer to the bookshelf with better access. Manipulation view: The book will be visible and within reach after arm adjustment. Arm state: Extended outward and raised up to reach the higher shelf.</prediction></think>
+<answer>moveahead, move_arm_out, move_arm_up</answer>
+Round 2:
+Env_feedback: Last action is executed successfully.
+Visual Observation: [Dual camera view]
+Arm State: z=0.1m, y=0.9m, wrist=0°, gripper=empty
+<think><observation>Navigation view: I'm positioned well at the bookshelf with the target book visible. Manipulation view: The book is now at the right height and within my gripper's reach. Arm state: Extended outward (z=0.1m) and raised (y=0.9m), perfectly positioned.</observation><reasoning>My arm is now positioned correctly for the book. I can execute the pickup action.</reasoning><prediction>Navigation view: I'll maintain position while holding the book. Manipulation view: The book will be securely grasped. Arm state: Same position but now holding the target book.</prediction></think>
+<answer>pickup</answer>"""
     elif selected_format == "no_think":
         example=f"""Example:
 Round 1:

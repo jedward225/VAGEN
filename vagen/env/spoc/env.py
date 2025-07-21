@@ -190,6 +190,14 @@ class SpocEnv(BaseEnv):
         self.valid_actions = []
         self.reward = 0
         
+        # --- New reward tracking variables ---
+        self.prev_distance_to_target = None
+        self.prev_holding = False
+        self.prev_position = None
+        self.action_history = []
+        self.exploration_positions = set()
+        self.last_pickup_attempt_step = -10  # Track pickup attempts
+        
         self.format_prompt_func = format_prompt[self.config.prompt_format]
         self.parse_func = PARSE_FUNC_MAP[self.config.prompt_format]
         
@@ -260,6 +268,14 @@ class SpocEnv(BaseEnv):
         self.total_reward = 0
         self.valid_actions = []
         self.reward = 0
+        
+        # Reset reward tracking variables
+        self.prev_distance_to_target = None
+        self.prev_holding = False
+        self.prev_position = None
+        self.action_history = []
+        self.exploration_positions = set()
+        self.last_pickup_attempt_step = -10
         
         # Initialize info dict with metrics for consistency
         info = {
@@ -356,9 +372,9 @@ class SpocEnv(BaseEnv):
                     self._execute_action(action_int)
                     success, distance = self.measure_success()
                     
-                    # Update reward based on success
+                    # Check for task success
+                    success, distance = self.measure_success()
                     if success:
-                        self.reward += 10.0  # Success reward
                         done = True
                         metrics['traj_metrics']['success'] = True
                         print(f"[DEBUG SPOC] SUCCESS! Task completed with action: {action_lower}")
@@ -380,15 +396,15 @@ class SpocEnv(BaseEnv):
         else:
             print(f"[DEBUG SPOC] SKIPPING action execution - invalid format or no valid actions")
         
-        if metrics['turn_metrics']['action_is_valid'] and rst.get("format_correct", True):
-            self.reward += self.config.format_reward
-            info["is_format_rewarded"] = True
-        else:
-            info["is_format_rewarded"] = False
-            
         # Check if the agent position has changed (action was effective)
         curr_pos = self.env.last_event.metadata["agent"]["position"]
         metrics['turn_metrics']['action_is_effective'] = curr_pos["x"] != prev_pos["x"] or curr_pos["z"] != prev_pos["z"]
+        
+        # Compute comprehensive reward using new system
+        step_reward, reward_breakdown = self._compute_step_reward(action_list, metrics, rst, prev_pos, curr_pos)
+        self.reward = step_reward
+        info["reward_breakdown"] = reward_breakdown
+        info["is_format_rewarded"] = reward_breakdown.get('format', 0.0) > 0
         
         # Update info dict
         info["metrics"] = metrics
@@ -474,6 +490,144 @@ class SpocEnv(BaseEnv):
         )
         
         return float(success), distance
+    
+    def _compute_step_reward(self, action_list, metrics, rst, prev_pos, curr_pos):
+        """Compute comprehensive step reward with multiple components."""
+        reward = 0.0
+        reward_breakdown = {}
+        
+        # 1. Format reward - restore higher weight for initial learning
+        if metrics['turn_metrics']['action_is_valid'] and rst.get('format_correct', True):
+            format_reward = self.config.format_reward * 0.5  # Increased from 0.1 to 0.5 for better initial success
+            reward += format_reward
+            reward_breakdown['format'] = format_reward
+        else:
+            reward_breakdown['format'] = 0.0
+            
+        # 2. Task success reward - highest priority
+        success, current_distance = self.measure_success()
+        if success:
+            success_reward = 10.0
+            reward += success_reward
+            reward_breakdown['success'] = success_reward
+        else:
+            reward_breakdown['success'] = 0.0
+            
+        # 3. Distance-based progress reward - more generous for initial learning
+        if self.prev_distance_to_target is not None and current_distance is not None:
+            distance_improvement = self.prev_distance_to_target - current_distance
+            if distance_improvement > 0.05:  # Lower threshold for easier initial progress (was 0.1)
+                progress_reward = min(distance_improvement * 3.0, 2.0)  # Higher reward multiplier and cap
+                reward += progress_reward
+                reward_breakdown['progress'] = progress_reward
+            elif distance_improvement < -0.05:  # Moving away penalty with lower threshold
+                retreat_penalty = max(distance_improvement * 0.5, -0.2)  # Reduced penalty for exploration
+                reward += retreat_penalty
+                reward_breakdown['progress'] = retreat_penalty
+            else:
+                reward_breakdown['progress'] = 0.0
+        else:
+            reward_breakdown['progress'] = 0.0
+            
+        # 4. Action effectiveness reward - increased for better initial learning
+        if metrics['turn_metrics']['action_is_effective']:
+            effectiveness_reward = 0.5  # Increased from 0.2 to 0.5
+            reward += effectiveness_reward
+            reward_breakdown['effectiveness'] = effectiveness_reward
+        else:
+            reward_breakdown['effectiveness'] = 0.0
+            
+        # 5. Object manipulation rewards
+        current_holding = self.is_holding
+        if current_holding and not self.prev_holding:
+            pickup_reward = 3.0  # First time picking up object
+            reward += pickup_reward
+            reward_breakdown['pickup'] = pickup_reward
+        else:
+            reward_breakdown['pickup'] = 0.0
+            
+        # 6. Exploration reward - encourage visiting new areas
+        current_pos_key = (round(curr_pos['x'], 1), round(curr_pos['z'], 1))
+        if current_pos_key not in self.exploration_positions:
+            self.exploration_positions.add(current_pos_key)
+            exploration_reward = 0.1
+            reward += exploration_reward
+            reward_breakdown['exploration'] = exploration_reward
+        else:
+            reward_breakdown['exploration'] = 0.0
+            
+        # 7. Repetitive action penalty
+        if len(action_list) > 0:
+            recent_actions = self.action_history[-5:]  # Look at last 5 actions
+            repeated_count = sum(1 for a in recent_actions if a == action_list[0])
+            if repeated_count >= 3:
+                repetition_penalty = -0.1 * (repeated_count - 2)
+                reward += repetition_penalty
+                reward_breakdown['repetition'] = repetition_penalty
+            else:
+                reward_breakdown['repetition'] = 0.0
+                
+        # 8. Pickup attempt timing reward/penalty
+        if len(action_list) > 0 and 'pickup' in action_list[0].lower():
+            if current_distance and current_distance < 2.0:  # Close enough to attempt pickup
+                if self._current_step - self.last_pickup_attempt_step > 5:  # Not too frequent
+                    pickup_attempt_reward = 1.0  # Increased from 0.5 to 1.0
+                    reward += pickup_attempt_reward
+                    reward_breakdown['pickup_attempt'] = pickup_attempt_reward
+                    self.last_pickup_attempt_step = self._current_step
+                else:
+                    pickup_spam_penalty = -0.1  # Reduced penalty from -0.2 to -0.1
+                    reward += pickup_spam_penalty
+                    reward_breakdown['pickup_attempt'] = pickup_spam_penalty
+            else:
+                pickup_far_penalty = -0.05  # Reduced penalty for exploration
+                reward += pickup_far_penalty
+                reward_breakdown['pickup_attempt'] = pickup_far_penalty
+        else:
+            reward_breakdown['pickup_attempt'] = 0.0
+            
+        # 9. NEW: Reward for getting objects visible in manipulation view
+        try:
+            objects = self.env.last_event.metadata.get("objects", [])
+            target_type = self.episode_data.get("targetObjectType") if self.episode_data else None
+            if target_type:
+                target_visible_in_manip = False
+                # Check if target is close enough to be in manipulation range
+                agent_pos = self.env.last_event.metadata["agent"]["position"]
+                for obj in objects:
+                    if obj.get("visible", False) and obj["objectType"].startswith(target_type):
+                        obj_distance = math.sqrt(
+                            (agent_pos["x"] - obj["position"]["x"])**2 +
+                            (agent_pos["z"] - obj["position"]["z"])**2
+                        )
+                        if obj_distance < 1.5:  # Close enough to be in manipulation view
+                            target_visible_in_manip = True
+                            break
+                
+                if target_visible_in_manip:
+                    manip_view_reward = 0.8
+                    reward += manip_view_reward
+                    reward_breakdown['manipulation_view'] = manip_view_reward
+                else:
+                    reward_breakdown['manipulation_view'] = 0.0
+            else:
+                reward_breakdown['manipulation_view'] = 0.0
+        except Exception:
+            reward_breakdown['manipulation_view'] = 0.0
+            
+        # Update tracking variables for next step
+        self.prev_distance_to_target = current_distance
+        self.prev_holding = current_holding
+        self.prev_position = curr_pos.copy()
+        if len(action_list) > 0:
+            self.action_history.append(action_list[0])
+            if len(self.action_history) > 10:  # Keep only recent history
+                self.action_history.pop(0)
+                
+        # Debug output for reward breakdown
+        print(f"[DEBUG REWARD] Total: {reward:.3f}, Breakdown: {reward_breakdown}")
+        
+        return reward, reward_breakdown
     
     def _get_arm_state(self) -> str:
         """Get the current arm state from real environment metadata."""
