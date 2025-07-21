@@ -14,19 +14,35 @@ def json_templated_to_NL_spec(json_spec: Dict[str, Any]) -> Dict[str, Any]:
     """Converts a templated JSON spec into a natural language instruction."""
     task_type = json_spec.get("task_type", "UnknownTask")
     extras = json_spec.get("extras", {}) # Use .get for safety
+    synsets = json_spec.get("synsets", [])  # SPOC uses synsets for object types
+    
+    # Try multiple ways to get object name
+    object_name = None
+    if extras.get('objectName'):
+        object_name = extras.get('objectName')
+    elif extras.get('object_name'):  # Alternative naming
+        object_name = extras.get('object_name')
+    elif synsets:
+        # Convert synset to readable name (SPOC uses WordNet synsets)
+        synset = synsets[0] if synsets else None
+        if synset and '.' in synset:
+            object_name = synset.split('.')[0].replace('_', ' ')
+    
+    if not object_name:
+        object_name = 'unknown object'
     
     instruction = "complete the following task" # Default
     if task_type == "FetchType":
-        instruction = f"go to the {extras.get('recepLocation', 'unknown location')} and get me a {extras.get('objectName', 'unknown object')}"
+        instruction = f"go to the {extras.get('recepLocation', 'unknown location')} and get me a {object_name}"
     elif task_type == "RoomVisit":
         instruction = f"go to the {extras.get('roomName', 'unknown room')}"
     elif task_type == "ObjectNavType":
-        instruction = f"go to the {extras.get('objectName', 'unknown object')}"
+        instruction = f"go to the {object_name}"
 
     return {
         'instruction': instruction,
         'scene': extras.get('scene_name', 'FloorPlan1'), # Default scene if not found
-        'objectName': extras.get('objectName') 
+        'objectName': object_name
     }
 
 class ChoresDataset:
@@ -219,7 +235,17 @@ class ChoresDataset:
                 
                 task_spec_json_str = full_str[start_idx : end_idx + 1]
                 task_spec_data = json.loads(task_spec_json_str)
+                
+                # DEBUG: Print actual SPOC data structure
+                if idx == 0:  # Only print for first episode to avoid spam
+                    print(f"[DEBUG SPOC DATA] Raw task_spec_data: {task_spec_data}")
+                    print(f"[DEBUG SPOC DATA] task_type: {task_spec_data.get('task_type')}")
+                    print(f"[DEBUG SPOC DATA] extras: {task_spec_data.get('extras', {})}")
+                
                 processed_task_spec = json_templated_to_NL_spec(task_spec_data)
+                
+                if idx == 0:
+                    print(f"[DEBUG SPOC DATA] processed_task_spec: {processed_task_spec}")
                 
                 # 4. Extract the initial agent pose
                 initial_pose_data = episode_group["last_agent_location"][0]

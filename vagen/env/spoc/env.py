@@ -216,11 +216,20 @@ class SpocEnv(BaseEnv):
         base_instruction = traj_data["instruction"]
         target_type = traj_data.get("targetObjectType", "unknown object")
         
-        # Create more specific instruction
-        if target_type != "unknown object":
+        # Debug: Check what target_type we got
+        print(f"[DEBUG EPISODE] Episode {idx}: targetObjectType='{target_type}', instruction='{base_instruction}'")
+        
+        # Create more specific instruction - handle None/empty cases
+        if target_type and target_type != "unknown object" and target_type != "None" and str(target_type).strip():
             self.episode_language_instruction = f"Find and fetch a {target_type}. Navigate around the environment to locate the {target_type}, then approach it and pick it up."
+            print(f"[DEBUG EPISODE] Using enhanced instruction: {self.episode_language_instruction}")
         else:
-            self.episode_language_instruction = base_instruction
+            # Fallback: try to extract from original instruction
+            if "fetch" in base_instruction.lower() or "get" in base_instruction.lower():
+                self.episode_language_instruction = "Find and fetch the target object. Navigate around the environment to locate objects you can pick up."
+            else:
+                self.episode_language_instruction = base_instruction
+            print(f"[DEBUG EPISODE] Using fallback instruction: {self.episode_language_instruction}")
 
         # Reset the AI2-THOR scene
         scene_name = traj_data["scene"]
