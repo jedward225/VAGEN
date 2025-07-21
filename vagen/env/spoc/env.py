@@ -523,9 +523,9 @@ class SpocEnv(BaseEnv):
                     pass
             
             # Add new camera positioned HIGH ABOVE the agent for TRUE top-down view
+            # Using the correct AI2-THOR API parameters
             camera_setup = {
                 "action": "AddThirdPartyCamera",
-                "thirdPartyCameraId": 0,
                 "position": {
                     "x": agent_pos["x"], 
                     "y": agent_pos["y"] + camera_height,  # HIGH above agent
@@ -535,11 +535,7 @@ class SpocEnv(BaseEnv):
                 "fieldOfView": 90,  # Wide field of view
                 "orthographic": True,  # Orthographic projection for map-like view
                 "orthographicSize": 5.0,  # Coverage area
-                "skyboxColor": {"r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0},
-                "renderDepth": False,
-                "renderSemanticSegmentation": False,
-                "renderInstanceSegmentation": False,
-                "renderNormalsImage": False
+                "skyboxColor": "white"
             }
             
             print(f"[DEBUG MAP] Creating TRUE top-down camera at height {camera_height}m above agent")
