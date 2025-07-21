@@ -257,7 +257,7 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
         action_keywords = ['moveahead', 'moveback', 'rotateright', 'rotateleft', 'rotateright_small', 'rotateleft_small',
                           'pickup', 'dropoff', 'move_arm_up', 'move_arm_down', 'move_arm_out', 'move_arm_in',
                           'wrist_open', 'wrist_close', 'move_arm_up_small', 'move_arm_down_small', 
-                          'move_arm_out_small', 'move_arm_in_small']
+                          'move_arm_out_small', 'move_arm_in_small', 'get_map']
         
         response_lower = response.lower()
         for keyword in action_keywords:
