@@ -211,7 +211,16 @@ class SpocEnv(BaseEnv):
         # Load real episode data using our new task loader
         traj_data = self.dataset[idx]
         self.episode_data = traj_data
-        self.episode_language_instruction = traj_data["instruction"]
+        
+        # Enhance the instruction with specific target information
+        base_instruction = traj_data["instruction"]
+        target_type = traj_data.get("targetObjectType", "unknown object")
+        
+        # Create more specific instruction
+        if target_type != "unknown object":
+            self.episode_language_instruction = f"Find and fetch a {target_type}. Navigate around the environment to locate the {target_type}, then approach it and pick it up."
+        else:
+            self.episode_language_instruction = base_instruction
 
         # Reset the AI2-THOR scene
         scene_name = traj_data["scene"]
@@ -555,7 +564,14 @@ class SpocEnv(BaseEnv):
         # 5. Object manipulation rewards
         current_holding = self.is_holding
         if current_holding and not self.prev_holding:
-            pickup_reward = 3.0  # First time picking up object
+            # Check if we picked up the correct target object
+            success, distance = self.measure_success()
+            if success:
+                pickup_reward = 10.0  # Big reward for picking up correct object!
+                print(f"[BIG REWARD] 🎉 PICKED UP CORRECT TARGET! Reward: +{pickup_reward}")
+            else:
+                pickup_reward = 3.0  # Smaller reward for wrong object
+                print(f"[REWARD] Picked up object (not target), Reward: +{pickup_reward}")
             reward += pickup_reward
             reward_breakdown['pickup'] = pickup_reward
         else:
@@ -601,33 +617,50 @@ class SpocEnv(BaseEnv):
         else:
             reward_breakdown['pickup_attempt'] = 0.0
             
-        # 9. NEW: Reward for getting objects visible in manipulation view
+        # 9. Enhanced target visibility and proximity rewards
         try:
             objects = self.env.last_event.metadata.get("objects", [])
             target_type = self.episode_data.get("targetObjectType") if self.episode_data else None
             if target_type:
-                target_visible_in_manip = False
-                # Check if target is close enough to be in manipulation range
                 agent_pos = self.env.last_event.metadata["agent"]["position"]
+                target_visible = False
+                target_visible_in_manip = False
+                closest_distance = float('inf')
+                
                 for obj in objects:
                     if obj.get("visible", False) and obj["objectType"].startswith(target_type):
+                        target_visible = True
                         obj_distance = math.sqrt(
                             (agent_pos["x"] - obj["position"]["x"])**2 +
                             (agent_pos["z"] - obj["position"]["z"])**2
                         )
+                        closest_distance = min(closest_distance, obj_distance)
+                        
                         if obj_distance < 1.5:  # Close enough to be in manipulation view
                             target_visible_in_manip = True
-                            break
                 
+                # Big reward for seeing target object
+                if target_visible:
+                    visibility_reward = 2.0
+                    reward += visibility_reward
+                    reward_breakdown['target_visible'] = visibility_reward
+                    print(f"[REWARD] TARGET VISIBLE! Distance: {closest_distance:.2f}m, Reward: +{visibility_reward}")
+                else:
+                    reward_breakdown['target_visible'] = 0.0
+                
+                # Extra reward for being close to target
                 if target_visible_in_manip:
-                    manip_view_reward = 0.8
+                    manip_view_reward = 3.0  # Increased reward
                     reward += manip_view_reward
                     reward_breakdown['manipulation_view'] = manip_view_reward
+                    print(f"[REWARD] TARGET IN REACH! Reward: +{manip_view_reward}")
                 else:
                     reward_breakdown['manipulation_view'] = 0.0
             else:
+                reward_breakdown['target_visible'] = 0.0
                 reward_breakdown['manipulation_view'] = 0.0
         except Exception:
+            reward_breakdown['target_visible'] = 0.0
             reward_breakdown['manipulation_view'] = 0.0
             
         # Update tracking variables for next step
@@ -683,10 +716,22 @@ class SpocEnv(BaseEnv):
             else:
                 brightness_desc = "moderately lit"
             
-            # Basic environment description based on real image
+            # Enhanced description with target information
             if self.episode_data and self.episode_data.get("targetObjectType"):
                 target_type = self.episode_data["targetObjectType"]
-                return f"The robot observes a {brightness_desc} indoor household environment. The robot is searching for a {target_type} to complete the fetch task. The scene contains various household objects and furniture."
+                # Get visible objects from AI2-THOR
+                objects = self.env.last_event.metadata.get("objects", [])
+                target_visible = False
+                
+                for obj in objects:
+                    if obj.get("visible", False) and obj["objectType"].startswith(target_type):
+                        target_visible = True
+                        break
+                
+                if target_visible:
+                    return f"The robot observes a {brightness_desc} indoor household environment. TARGET FOUND: A {target_type} is visible in the scene! The robot should approach and pick it up."
+                else:
+                    return f"The robot observes a {brightness_desc} indoor household environment. The robot is searching for a {target_type}. Continue exploring to find the target object."
             else:
                 return f"The robot observes a {brightness_desc} indoor household environment with various objects and furniture."
                 
@@ -747,9 +792,14 @@ class SpocEnv(BaseEnv):
             add_example=False
         )
         
-        # Get the real image from AI2-THOR
+        # Get the real image from AI2-THOR with better error handling
         try:
             import numpy as np
+            # Force a step to ensure we have a fresh event
+            if not self.env.last_event or self.env.last_event.frame is None:
+                print("[DEBUG] Refreshing AI2-THOR event...")
+                self.env.step(action="Pass")  # Do nothing action to refresh
+            
             if self.env and self.env.last_event and self.env.last_event.frame is not None:
                 # Use the real frame from AI2-THOR
                 frame = self.env.last_event.frame
@@ -763,15 +813,11 @@ class SpocEnv(BaseEnv):
                 
             else:
                 # Fallback: Check if frame is None
-                print(f"[DEBUG] AI2-THOR frame status: frame={self.env.last_event.frame is not None if self.env.last_event else 'no_event'}")
-                print(f"[DEBUG] Event metadata keys: {list(self.env.last_event.metadata.keys()) if self.env.last_event else 'no_event'}")
-                
-                # If still no frame, this indicates CloudRendering is still not working
-                raise ValueError("CloudRendering still returning None frames")
+                print(f"[WARNING] AI2-THOR frame unavailable, using fallback")
+                raise ValueError("CloudRendering frame unavailable")
                 
         except Exception as e:
-            print(f"[ERROR] Real rendering failed: {e}")
-            print(f"[FALLBACK] Using synthetic frames as backup")
+            print(f"[FALLBACK] Real rendering failed: {e}, using synthetic frames")
             
             # Fallback to synthetic frames if real rendering fails
             import numpy as np
@@ -832,10 +878,11 @@ class SpocEnv(BaseEnv):
         
         # Provide a concise system prompt for the complex SPOC task
         spoc_system_prompt = (
-            "You are a Stretch robot in a household environment. Your task is to follow instructions to fetch objects. "
-            "IMPORTANT: Keep your responses concise. In <think> tags, write 1-2 sentences for observation, reasoning, and prediction. "
-            "In <answer> tags, provide only the action name(s). "
-            "Available actions: moveahead, moveback, rotateright, rotateleft, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, etc."
+            "You are a Stretch robot in a household environment. Your task is to find and fetch specific objects. "
+            "STRATEGY: 1) Explore by moving forward/rotating until you see the target object. 2) When target is visible, approach it. 3) Extend arm and pickup the object. "
+            "IMPORTANT: Keep responses concise. In <think> tags: observation (what you see), reasoning (what to do next), prediction (expected outcome). "
+            "In <answer> tags: action name(s) only. "
+            "Actions: moveahead, moveback, rotateright, rotateleft, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in."
         )
         # spoc_system_prompt = (
         #     "You are an AI agent controlling a Stretch robot. Your ONLY task is to output actions to complete goals."
