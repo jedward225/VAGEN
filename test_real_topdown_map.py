@@ -21,7 +21,7 @@ config = SpocEnvConfig(
 
 env = SpocEnv(config)
 
-# 重置环境
+# 重置环境，测试官方ToggleMapView
 obs, info = env.reset(seed=12345)
 scene = env.episode_data.get('scene', 'unknown')
 print(f"场景: {scene}")

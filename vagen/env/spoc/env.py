@@ -504,14 +504,18 @@ class SpocEnv(BaseEnv):
             self.is_holding = False
 
     def _generate_topdown_map(self):
-        """Generate a top-down map view of the environment."""
+        """Generate a top-down map view of the environment using official ToggleMapView."""
         try:
-            # Initialize third-party camera if not already done
-            if len(self.env.last_event.third_party_camera_frames) < 2:
-                event = self.env.step({"action": "GetMapViewCameraProperties"})
-                cam = event.metadata["actionReturn"].copy()
-                cam["orthographicSize"] += 1
-                self.env.step({"action": "AddThirdPartyCamera", "skyboxColor": "white", **cam})
+            print(f"[DEBUG MAP] 使用官方ToggleMapView获取当前场景俯视图")
+            
+            # 使用官方的ToggleMapView切换到俯视图模式
+            map_event = self.env.step({"action": "ToggleMapView"})
+            
+            if not map_event.metadata["lastActionSuccess"]:
+                print(f"[DEBUG MAP] ToggleMapView失败: {map_event.metadata.get('errorMessage', '未知错误')}")
+                return
+                
+            print(f"[DEBUG MAP] 成功切换到地图视图模式")
             
             # Get current agent trajectory (just current position)
             agent_pos = self.env.last_event.metadata["agent"]["position"]
@@ -552,24 +556,22 @@ class SpocEnv(BaseEnv):
                     "waypoints": waypoints,
                 })
             
-            # Visualize agent path
-            event = self.env.step({"action": "VisualizePath", "positions": agent_path})
-            self.env.step({"action": "HideVisualizedPath"})
-            
-            # Get the generated top-down view
-            if len(event.third_party_camera_frames) > 0:
-                topdown_frame = event.third_party_camera_frames[-1]
-                
-                # Crop the frame (similar to SPOC's approach)
-                cutoff = round(topdown_frame.shape[1] * 6 / 396)
-                cropped_frame = topdown_frame[:, cutoff:-cutoff, :]
-                
-                # Store the map in the environment state
-                self.current_topdown_map = cropped_frame
-                print(f"[DEBUG MAP] Generated top-down map: shape={cropped_frame.shape}")
+            # 在地图视图模式下获取当前场景的俯视图
+            # 使用当前的frame，因为已经切换到地图视图
+            if map_event.frame is not None:
+                topdown_frame = map_event.frame
+                self.current_topdown_map = topdown_frame
+                print(f"[DEBUG MAP] 获取到当前场景({self.episode_data.get('scene', '未知')})的俯视图: shape={topdown_frame.shape}")
             else:
-                print("[DEBUG MAP] Warning: No third-party camera frames available")
+                print(f"[DEBUG MAP] 错误：地图视图模式下无法获取画面")
                 self.current_topdown_map = None
+                
+            # 切换回正常视图模式
+            normal_event = self.env.step({"action": "ToggleMapView"})
+            if normal_event.metadata["lastActionSuccess"]:
+                print(f"[DEBUG MAP] 成功切换回正常视图")
+            else:
+                print(f"[DEBUG MAP] 警告：无法切换回正常视图")
                 
         except Exception as e:
             print(f"[DEBUG MAP] Error generating top-down map: {e}")
