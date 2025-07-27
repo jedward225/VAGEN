@@ -298,6 +298,7 @@ def format_prompt_generator(format_type):
         config = FORMAT_CONFIGS[format_type]
         
         base_prompt = f"""You can take up to {max_actions_per_step} action(s) at a time, separated by '{action_sep}'.
+IMPORTANT: Limit responses to 1-3 actions maximum. Avoid repeating actions.
 {config["description"]}"""
         
         if "additional_info" in config: # In case it's added to FORMAT_CONFIGS later
