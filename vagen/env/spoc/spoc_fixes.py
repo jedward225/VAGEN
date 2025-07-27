@@ -214,11 +214,14 @@ def validate_scene_name(scene_name: str) -> Tuple[bool, str]:
     Validates if a scene name exists in AI2-THOR.
     Returns (is_valid, corrected_scene_name).
     """
+    # Strip _physics suffix if present (AI2-THOR doesn't use this)
+    clean_scene_name = scene_name.replace("_physics", "")
+    
     # Extract scene number
     import re
-    match = re.search(r'FloorPlan(\d+)', scene_name)
+    match = re.search(r'FloorPlan(\d+)', clean_scene_name)
     if not match:
-        return False, scene_name
+        return False, clean_scene_name
     
     scene_num = int(match.group(1))
     
@@ -244,11 +247,9 @@ def validate_scene_name(scene_name: str) -> Tuple[bool, str]:
             corrected_num = min(max(401, scene_num), 430)
         
         corrected_scene = f"FloorPlan{corrected_num}"
-        if "_physics" in scene_name:
-            corrected_scene += "_physics"
         return False, corrected_scene
     
-    return True, scene_name
+    return True, clean_scene_name
 
 
 def get_wrist_rotation_delta(current_wrist: float, action: str) -> float:

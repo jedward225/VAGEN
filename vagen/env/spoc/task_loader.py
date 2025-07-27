@@ -214,7 +214,7 @@ class ChoresDataset:
                 # 2. Construct the correct scene name string from the index
                 # Map SPOC's large house_index to ai2thor v5.0.0's supported FloorPlan1-430 range
                 mapped_scene_index = self._map_house_index_to_scene(house_index)
-                scene_name = f"FloorPlan{mapped_scene_index}_physics"
+                scene_name = f"FloorPlan{mapped_scene_index}"
 
                 # 3. Load and process the task spec JSON to get the instruction
                 task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()

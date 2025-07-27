@@ -276,9 +276,9 @@ class SpocEnv(BaseEnv):
         reset_success = False
         for attempt in range(max_retries):
             try:
-                # Step 1: Reset the AI2-THOR scene with SPOC-compatible navigation mesh setup
-                scene_data = self._prepare_scene_with_navigation_mesh(scene_name)
-                self._last_event = self.env.reset(scene=scene_data)
+                # Step 1: Reset the AI2-THOR scene using standard iTHOR reset
+                print(f"[DEBUG] Attempting to reset to AI2-THOR scene: {scene_name}")
+                self._last_event = self.env.reset(scene=scene_name)
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to reset to scene {scene_name}.")
                 
@@ -1582,8 +1582,9 @@ class SpocEnv(BaseEnv):
         # Get current arm state
         arm_state = self._get_arm_state()
         
-        # Format the template with both visual description AND <image> placeholder for VLM
-        visual_observation_text = f"{visual_description} {img_placeholder}"
+        # Format the template with both visual description AND 3 <image> placeholders for VLM
+        # We provide 3 images: navigation camera, manipulation camera, and top-down map
+        visual_observation_text = f"{visual_description} {img_placeholder} {img_placeholder} {img_placeholder}"
         
         if init_obs:
             obs_str = init_observation_template(
