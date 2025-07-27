@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Sequence
 
 def draw_target_box(
     image,

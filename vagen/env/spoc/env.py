@@ -15,6 +15,13 @@ from .env_config import SpocEnvConfig
 from .prompt import system_prompt,init_observation_template, action_template, format_prompt
 from .task_loader import get_dataset
 from vagen.env.utils.state_reward_text_utils import env_state_reward_wrapper
+from .spoc_fixes import (
+    get_spoc_compatible_thor_config,
+    is_object_type_match_spoc,
+    validate_scene_name,
+    get_wrist_rotation_delta,
+    clamp_arm_position
+)
 
 class SpocEnv(BaseEnv):
     """SPOC environment with Stretch robot manipulation tasks."""   
@@ -58,8 +65,8 @@ class SpocEnv(BaseEnv):
         "Rotate the agent's base left by 30°",                  # rotateleft
         "Rotate the agent's base right by 6°",                  # rotateright_small
         "Rotate the agent's base left by 6°",                   # rotateleft_small
-        "Deprecated - tilt camera upward (not used for Stretch)", # lookup
-        "Deprecated - tilt camera downward (not used for Stretch)", # lookdown
+        "Tilt navigation camera upward by 10°",                 # lookup
+        "Tilt navigation camera downward by 10°",               # lookdown
         "Initiate a grasp action to pick up an object",         # pickup
         "Execute a release action to drop an object",           # dropoff
         "Move the arm up by 0.1 meters",                       # move_arm_up
@@ -95,29 +102,10 @@ class SpocEnv(BaseEnv):
         for key, value in env_vars_to_set.items():
             os.environ[key] = value
 
-        # SPOC official configuration (from STRETCH_ENV_ARGS)
-        self.thor_config = {
-            "gridSize": 0.15,  # SPOC uses 0.15 (AGENT_MOVEMENT_CONSTANT * 0.75)
-            "width": 396,      # INTEL_CAMERA_WIDTH
-            "height": 224,     # INTEL_CAMERA_HEIGHT  
-            "visibilityDistance": 0.8673349051766235,  # MAXIMUM_DISTANCE_ARM_FROM_AGENT_CENTER
-            "visibilityScheme": "Distance",
-            "fieldOfView": 59,  # INTEL_VERTICAL_FOV
-            "server_class": ai2thor.fifo_server.FifoServer,  # Critical for SPOC
-            "useMassThreshold": True,
-            "massThreshold": 10,
-            "autoSimulation": False,
-            "autoSyncTransforms": True,
-            "renderInstanceSegmentation": True,
-            "agentMode": "stretch",
-            "renderDepthImage": False,  # SAVE_DEPTH = False
-            "cameraNearPlane": 0.01,    # VERY IMPORTANT
-            "branch": None,             # IMPORTANT: do not use branch
-            "commit_id": "5e43486351ac6339c399c199e601c9dd18daecc3",  # STRETCH_COMMIT_ID
-            "server_timeout": 1000,     # MAXIMUM_SERVER_TIMEOUT (critical for CloudRendering)
-            "snapToGrid": False,
-            "fastActionEmit": True,
-        }
+        # Use SPOC-compatible configuration with correct commit ID
+        self.thor_config = get_spoc_compatible_thor_config()
+        # Add server_class which is not in the base config but needed
+        self.thor_config["server_class"] = ai2thor.fifo_server.FifoServer
 
         self.env = None
         
@@ -148,9 +136,11 @@ class SpocEnv(BaseEnv):
             # Verify the commit ID matches SPOC requirements
             if hasattr(self.env, '_build') and self.env._build and hasattr(self.env._build, 'commit_id'):
                 actual_commit = self.env._build.commit_id
-                expected_commit = "5e43486351ac6339c399c199e601c9dd18daecc3"
+                expected_commit = self.thor_config["commit_id"]  # Use the correct commit from config
                 if expected_commit not in actual_commit:
                     print(f"[WARNING] AI2-THOR commit mismatch. Expected: {expected_commit}, Got: {actual_commit}")
+                else:
+                    print(f"[SUCCESS] AI2-THOR commit verified: {actual_commit}")
             
             print(f"[SUCCESS] AI2-THOR initialized successfully with SPOC configuration")
             
@@ -181,6 +171,10 @@ class SpocEnv(BaseEnv):
         self.total_reward = 0
         self.valid_actions = []
         self.reward = 0
+        self.agent_path = []  # Track agent positions for path visualization
+        
+        # --- Initialize third party camera setup for manipulation camera ---
+        self._setup_manipulation_camera()
         
         # --- New reward tracking variables ---
         self.prev_distance_to_target = None
@@ -192,6 +186,44 @@ class SpocEnv(BaseEnv):
         
         self.format_prompt_func = format_prompt[self.config.prompt_format]
         self.parse_func = PARSE_FUNC_MAP[self.config.prompt_format]
+    
+    def _setup_manipulation_camera(self):
+        """Setup manipulation camera as third party camera like SPOC official implementation."""
+        try:
+            # SPOC uses thirdPartyCameras[0] for manipulation camera
+            # This will be set up during reset/calibration, but we prepare the groundwork here
+            self._manipulation_camera_initialized = False
+            print("[SPOC Camera] Manipulation camera setup prepared")
+        except Exception as e:
+            print(f"[WARNING] Failed to prepare manipulation camera setup: {e}")
+    
+    @property
+    def navigation_camera(self):
+        """Get navigation camera with SPOC-compatible cutoff like official implementation."""
+        try:
+            frame = self.env.last_event.frame
+            if frame is not None:
+                cutoff = round(frame.shape[1] * 6 / 396)
+                return frame[:, cutoff:-cutoff, :]
+            else:
+                return None
+        except Exception as e:
+            print(f"[ERROR] Failed to get navigation camera: {e}")
+            return None
+    
+    @property 
+    def manipulation_camera(self):
+        """Get manipulation camera with SPOC-compatible cutoff like official implementation."""
+        try:
+            if len(self.env.last_event.third_party_camera_frames) > 0:
+                frame = self.env.last_event.third_party_camera_frames[0]
+                cutoff = round(frame.shape[1] * 6 / 396)
+                return frame[:, cutoff:-cutoff, :3]  # Only RGB channels like SPOC
+            else:
+                return None
+        except Exception as e:
+            print(f"[ERROR] Failed to get manipulation camera: {e}")
+            return None
         
     def reset(self, seed=None):
         """Reset the environment to a new episode from the real dataset."""
@@ -231,14 +263,22 @@ class SpocEnv(BaseEnv):
                 self.episode_language_instruction = base_instruction
             print(f"[DEBUG EPISODE] Using fallback instruction: {self.episode_language_instruction}")
 
-        # Reset the AI2-THOR scene
+        # Reset the AI2-THOR scene with validation
         scene_name = traj_data["scene"]
+        
+        # Validate scene name and correct if needed
+        is_valid, corrected_scene = validate_scene_name(scene_name)
+        if not is_valid:
+            print(f"[SPOC] Warning: Scene {scene_name} not valid, using {corrected_scene}")
+            scene_name = corrected_scene
+            
         max_retries = 3
         reset_success = False
         for attempt in range(max_retries):
             try:
-                # Step 1: Reset the AI2-THOR scene
-                self._last_event = self.env.reset(scene=scene_name)
+                # Step 1: Reset the AI2-THOR scene with SPOC-compatible navigation mesh setup
+                scene_data = self._prepare_scene_with_navigation_mesh(scene_name)
+                self._last_event = self.env.reset(scene=scene_data)
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to reset to scene {scene_name}.")
                 
@@ -254,6 +294,9 @@ class SpocEnv(BaseEnv):
                 )
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to teleport agent in scene {scene_name}.")
+                
+                # Step 2.5: Calibrate agent like SPOC (cameras, gripper, etc.)
+                self._calibrate_agent()
 
                 # Step 3: Enable lighting in the scene
                 try:
@@ -301,6 +344,7 @@ class SpocEnv(BaseEnv):
         self.total_reward = 0
         self.valid_actions = []
         self.reward = 0
+        self.agent_path = [pose["position"]]  # Initialize with starting position
         
         # Reset reward tracking variables
         self.prev_distance_to_target = None
@@ -403,6 +447,11 @@ class SpocEnv(BaseEnv):
                     action_int = self.ACTION_LOOKUP[action_lower]
                     print(f"[DEBUG SPOC] Valid action found: {action_lower} -> {action_int}")
                     self._execute_action(action_int)
+                    
+                    # Track agent path for map visualization
+                    curr_agent_pos = self.env.last_event.metadata["agent"]["position"]
+                    self.agent_path.append(curr_agent_pos)
+                    
                     success, distance = self.measure_success()
                     
                     # Check for task success
@@ -456,73 +505,331 @@ class SpocEnv(BaseEnv):
         return self._render(init_obs=False), self.reward, done, info
     
     def _execute_action(self, action_index: int):
-        """Executes a discrete action for the Stretch robot."""
+        """Executes a discrete action for the Stretch robot using SPOC-compatible actions."""
+        # Get current arm state for calculating absolute positions
+        current_arm_state = self._get_current_arm_state()
+        
+        # Base action map for non-arm/wrist actions
         action_map = {
-            1: {"action": "MoveAhead", "moveMagnitude": 0.2},
-            2: {"action": "MoveBack", "moveMagnitude": 0.2},
-            3: {"action": "RotateRight", "degrees": 30},
-            4: {"action": "RotateLeft", "degrees": 30},
-            5: {"action": "RotateRight", "degrees": 6},
-            6: {"action": "RotateLeft", "degrees": 6},
-            7: {"action": "Pass"},  # Deprecated lookup
-            8: {"action": "Pass"},  # Deprecated lookdown
-            9: {"action": "PickupObject"}, # Attempts to pick up object in front of gripper
+            # Navigation actions - use SPOC-compatible MoveAgent
+            1: {"action": "MoveAgent", "ahead": 0.2},
+            2: {"action": "MoveAgent", "ahead": -0.2},
+            # Rotation actions - use SPOC-compatible RotateAgent
+            3: {"action": "RotateAgent", "degrees": 30},
+            4: {"action": "RotateAgent", "degrees": -30},
+            5: {"action": "RotateAgent", "degrees": 6},
+            6: {"action": "RotateAgent", "degrees": -6},
+            # Camera pitch actions - Stretch CAN do this via RotateCameraMount
+            7: {"action": "RotateCameraMount", "degrees": 10, "secondary": False},  # lookup
+            8: {"action": "RotateCameraMount", "degrees": -10, "secondary": False}, # lookdown
+            # Object manipulation
+            9: {"action": "PickupObject"},
             10: {"action": "ReleaseObject"},
-            11: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0.1, "z": 0}},
-            12: {"action": "MoveArmRelative", "offset": {"x": 0, "y": -0.1, "z": 0}},
-            13: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": 0.1}},
-            14: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": -0.1}},
-            15: {"action": "RotateWristRelative", "yaw": -10},
-            16: {"action": "RotateWristRelative", "yaw": 10},
-            17: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0.02, "z": 0}},
-            18: {"action": "MoveArmRelative", "offset": {"x": 0, "y": -0.02, "z": 0}},
-            19: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": 0.02}},
-            20: {"action": "MoveArmRelative", "offset": {"x": 0, "y": 0, "z": -0.02}},
         }
+        
+        # Handle arm movements with bounds checking
+        if action_index in range(11, 21) and action_index not in [15, 16]:
+            if action_index == 11:  # move_arm_up
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"] + 0.1, "z": current_arm_state["z"]}
+            elif action_index == 12:  # move_arm_down
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"] - 0.1, "z": current_arm_state["z"]}
+            elif action_index == 13:  # move_arm_out
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"], "z": current_arm_state["z"] + 0.1}
+            elif action_index == 14:  # move_arm_in
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"], "z": current_arm_state["z"] - 0.1}
+            elif action_index == 17:  # move_arm_up_small
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"] + 0.02, "z": current_arm_state["z"]}
+            elif action_index == 18:  # move_arm_down_small
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"] - 0.02, "z": current_arm_state["z"]}
+            elif action_index == 19:  # move_arm_out_small
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"], "z": current_arm_state["z"] + 0.02}
+            elif action_index == 20:  # move_arm_in_small
+                new_pos = {"x": current_arm_state["x"], "y": current_arm_state["y"], "z": current_arm_state["z"] - 0.02}
+            
+            # Clamp position to bounds
+            new_pos = clamp_arm_position(new_pos)
+            action_map[action_index] = {"action": "MoveArm", "position": new_pos}
+        
+        # Handle wrist rotation with bounds
+        elif action_index in [15, 16]:
+            try:
+                arm_metadata = self.env.last_event.metadata['arm']
+                joints = arm_metadata['joints']
+                # Find wrist joint rotation
+                wrist_joint = None
+                for joint in joints:
+                    if joint["name"] == "stretch_robot_wrist_2_jnt":
+                        wrist_joint = joint
+                        break
+                
+                if wrist_joint:
+                    current_wrist = wrist_joint["rootRelativeRotation"]["w"] * wrist_joint["rootRelativeRotation"]["y"]
+                    
+                    if action_index == 15:  # wrist_open
+                        yaw = get_wrist_rotation_delta(current_wrist, "open")
+                    else:  # wrist_close
+                        yaw = get_wrist_rotation_delta(current_wrist, "close")
+                    
+                    action_map[action_index] = {"action": "RotateWristRelative", "yaw": yaw}
+                else:
+                    # Fallback if can't find wrist joint
+                    action_map[15] = {"action": "RotateWristRelative", "yaw": -10}
+                    action_map[16] = {"action": "RotateWristRelative", "yaw": 10}
+            except:
+                # Fallback
+                action_map[15] = {"action": "RotateWristRelative", "yaw": -10}
+                action_map[16] = {"action": "RotateWristRelative", "yaw": 10}
 
         params = action_map.get(action_index, {"action": "Pass"})
+        
+        # Add SPOC-compatible additional arguments
+        if params["action"] in ["MoveArm", "RotateWristRelative"]:
+            # Add SPOC's ADDITIONAL_ARM_ARGS equivalent
+            params.update({
+                "disableRendering": True,
+                "returnToStart": True,
+                "speed": 1
+            })
+        elif params["action"] == "MoveAgent":
+            # Add SPOC's ADDITIONAL_NAVIGATION_ARGS equivalent  
+            params.update({
+                "disableRendering": True,
+                "returnToStart": True
+            })
+        
         self._last_event = self.env.step(**params)
 
-        # Update held status after pickup/dropoff attempts
-        if params["action"] == "PickupObject" and self._last_event.metadata["lastActionSuccess"]:
-            self.is_holding = True
-        elif params["action"] == "ReleaseObject" and self._last_event.metadata["lastActionSuccess"]:
+        # Update held status using proper AI2-THOR metadata (not just a flag)
+        self._update_holding_status()
+        
+        # Add physics step for dropoff action like SPOC
+        if params["action"] == "ReleaseObject":
+            self.env.step(action="AdvancePhysicsStep", simSeconds=2)
+
+    def _get_current_arm_state(self):
+        """Get current arm state for absolute positioning like SPOC."""
+        try:
+            arm_metadata = self.env.last_event.metadata['arm']
+            joints = arm_metadata['joints']
+            
+            # Calculate relative arm position like SPOC's get_relative_stretch_current_arm_state
+            z = joints[-1]["rootRelativePosition"]["z"]
+            x = joints[-1]["rootRelativePosition"]["x"]  
+            y = joints[0]["rootRelativePosition"]["y"] - 0.16297650337219238  # SPOC's baseline offset
+            
+            return {"x": x, "y": y, "z": z}
+        except (KeyError, IndexError):
+            # Fallback to default retracted position
+            return {"x": 0.0, "y": 0.8, "z": 0.0}
+    
+    def _update_holding_status(self):
+        """Update holding status based on actual AI2-THOR metadata."""
+        try:
+            held_objects = self.env.last_event.metadata['arm']['heldObjects']
+            self.is_holding = len(held_objects) > 0
+        except (KeyError, IndexError):
             self.is_holding = False
 
     def measure_success(self):
         """
         Check if the agent has successfully completed the Fetch task.
-        Success is defined as holding an object of the correct type.
+        Success is defined as holding an object of the correct type using SPOC-compatible matching.
         """
         # Default to not successful
         success = False
+        distance = float('inf')
         
         try:
-            # Check if we are holding the correct object type
-            if self.is_holding and self.episode_data:
-                held_objects = self.env.last_event.metadata['arm']['heldObjects']
-                target_type = self.episode_data.get("targetObjectType")
-                if held_objects and target_type:
-                    # Check if any held object matches the target type
-                    for obj in held_objects:
-                        # AI2-THOR object types can have numbers appended (e.g., "Mug_1")
-                        if obj['objectType'].startswith(target_type):
-                            success = True
-                            break
+            # Always get agent position for distance calculation
+            agent_pos = self.env.last_event.metadata["agent"]["position"]
+            
+            # Check if we are holding the correct object type using proper AI2-THOR metadata
+            held_objects = self.env.last_event.metadata['arm']['heldObjects']
+            target_type = self.episode_data.get("targetObjectType") if self.episode_data else None
+            
+            if held_objects and target_type:
+                # Check if any held object matches the target type using SPOC-compatible matching
+                for obj in held_objects:
+                    if self._is_object_type_match(obj['objectType'], target_type):
+                        success = True
+                        print(f"[SUCCESS] Successfully holding target object: {obj['objectType']} matches {target_type}")
+                        break
+            
+            # Calculate distance to target (either held object or closest target in scene)
+            if success and held_objects:
+                # If holding target, distance is 0
+                distance = 0.0
+            else:
+                # Find closest target object in scene for distance calculation
+                distance = self._calculate_distance_to_closest_target(agent_pos, target_type)
+                
         except (KeyError, IndexError) as e:
-            # Metadata might not be available if the last action failed weirdly
+            # Metadata might not be available if the last action failed
             print(f"Warning: Could not check success due to missing metadata: {e}")
             success = False
-
-        # For compatibility, also return distance, though it's not the primary metric
-        agent_pos = self.env.last_event.metadata["agent"]["position"]
-        target_pos = self.episode_data.get("target_position", agent_pos) if self.episode_data else agent_pos
-        distance = math.sqrt(
-            (agent_pos["x"] - target_pos["x"])**2 +
-            (agent_pos["z"] - target_pos["z"])**2
-        )
+            # Fallback distance calculation
+            if self.episode_data and self.episode_data.get("target_position"):
+                target_pos = self.episode_data["target_position"]
+                distance = math.sqrt(
+                    (agent_pos["x"] - target_pos["x"])**2 +
+                    (agent_pos["z"] - target_pos["z"])**2
+                )
         
         return float(success), distance
+    
+    def _prepare_scene_with_navigation_mesh(self, scene_name: str) -> dict:
+        """
+        Prepare scene data with SPOC-compatible navigation mesh setup.
+        Based on SPOC's StretchController.reset() method.
+        """
+        # SPOC uses multiple agent radii for robust path planning
+        AGENT_RADIUS_LIST = [
+            (0, 0.18),  # Most restrictive - tight spaces
+            (1, 0.225), # Medium restrictive  
+            (2, 0.3)    # Least restrictive - open areas
+        ]
+        
+        # Base navigation mesh configuration from SPOC
+        base_agent_navmesh = {
+            "agentHeight": 1.8,
+            "agentSlope": 10,
+            "agentClimb": 0.5,
+            "voxelSize": 0.1666667,
+        }
+        
+        # Create scene data with navigation meshes
+        scene_data = {
+            "sceneName": scene_name,
+            "metadata": {
+                "agent": {
+                    "horizon": 0,  # SPOC uses HORIZON=0
+                    "position": {"x": 0, "y": 0.95, "z": 0},  # Default position
+                    "rotation": {"x": 0, "y": 270, "z": 0},   # Default rotation
+                    "standing": True,
+                },
+                "navMeshes": [
+                    {**base_agent_navmesh, **{"id": i, "agentRadius": r}} 
+                    for (i, r) in AGENT_RADIUS_LIST
+                ]
+            }
+        }
+        
+        return scene_data
+        
+    def _calibrate_agent(self):
+        """
+        Calibrate the agent like SPOC's calibrate_agent() method.
+        Sets up cameras, gripper, and other agent parameters.
+        """
+        try:
+            # Step 1: Ensure agent is in standing position with horizon=0
+            self.env.step(action="Teleport", horizon=0, standing=True)
+            
+            # Step 2: Calibrate navigation camera mount (with SPOC's randomization)
+            nav_camera_angle = 27.0 + np.random.uniform(-2, 2)  # SPOC's ±2° randomization
+            self.env.step(
+                action="RotateCameraMount",
+                degrees=nav_camera_angle,
+                secondary=False  # Navigation camera
+            )
+            
+            # Step 3: Set navigation camera FOV (with SPOC's randomization)
+            nav_fov = 59 + np.random.uniform(-1, 1)  # SPOC's ±1° randomization
+            self.env.step(
+                action="ChangeFOV",
+                fieldOfView=nav_fov,
+                camera="FirstPersonCharacter"
+            )
+            
+            # Step 4: Calibrate manipulation camera mount (with SPOC's randomization)
+            manip_camera_angle = 33.0 + np.random.uniform(-2, 2)  # SPOC's ±2° randomization
+            self.env.step(
+                action="RotateCameraMount",
+                degrees=manip_camera_angle,
+                secondary=True  # Manipulation camera
+            )
+            
+            # Step 5: Set manipulation camera FOV (with SPOC's randomization)
+            manip_fov = 59 + np.random.uniform(-1, 1)  # SPOC's ±1° randomization
+            self.env.step(
+                action="ChangeFOV",
+                fieldOfView=manip_fov,
+                camera="SecondaryCamera"
+            )
+            
+            # Step 6: Set gripper openness to SPOC's default (30°)
+            self.env.step(action="SetGripperOpenness", openness=30)
+            
+            # Step 7: Hide the unrealistic blue sphere on the gripper (like SPOC)
+            self.env.step("ToggleMagnetVisibility", visible=False, raise_for_failure=True)
+            
+            # Step 8: Initialize manipulation camera (third party camera) like SPOC
+            self._initialize_manipulation_camera()
+            
+            print("[SPOC Calibration] Agent calibration completed successfully")
+            
+        except Exception as e:
+            print(f"[WARNING] Agent calibration failed: {e}")
+            # Don't fail the whole reset if calibration has issues
+    
+    def _initialize_manipulation_camera(self):
+        """Initialize manipulation camera as third party camera like SPOC official does."""
+        try:
+            # Check if we already have the required third party camera
+            if len(self.env.last_event.third_party_camera_frames) == 0:
+                # SPOC ensures thirdPartyCameras[0] exists during initialization
+                # The manipulation camera should already be set up by AI2-THOR's Stretch agent setup
+                # We just need to verify it's working
+                self.env.step(action="Pass")  # Refresh to ensure cameras are active
+                
+                if len(self.env.last_event.third_party_camera_frames) > 0:
+                    self._manipulation_camera_initialized = True
+                    print("[SPOC Camera] Manipulation camera (third party camera) initialized successfully")
+                else:
+                    print("[WARNING] Manipulation camera not available - will use navigation camera for both views")
+                    self._manipulation_camera_initialized = False
+            else:
+                self._manipulation_camera_initialized = True
+                print("[SPOC Camera] Manipulation camera already available")
+                
+        except Exception as e:
+            print(f"[WARNING] Failed to initialize manipulation camera: {e}")
+            self._manipulation_camera_initialized = False
+    
+    def _is_object_type_match(self, object_type: str, target_type: str) -> bool:
+        """
+        SPOC-compatible object type matching using the robust matching from spoc_fixes.
+        """
+        return is_object_type_match_spoc(object_type, target_type)
+        
+    def _calculate_distance_to_closest_target(self, agent_pos: dict, target_type: str) -> float:
+        """
+        Calculate distance to the closest target object in the scene.
+        Uses SPOC-compatible 3D distance calculation.
+        """
+        if not target_type:
+            return float('inf')
+            
+        try:
+            objects = self.env.last_event.metadata.get("objects", [])
+            min_distance = float('inf')
+            
+            for obj in objects:
+                if obj.get("visible", False) and self._is_object_type_match(obj["objectType"], target_type):
+                    obj_pos = obj["position"]
+                    # Use SPOC's 3D position distance calculation
+                    distance = math.sqrt(
+                        (agent_pos["x"] - obj_pos["x"])**2 +
+                        (agent_pos["y"] - obj_pos["y"])**2 +  # Include Y dimension like SPOC
+                        (agent_pos["z"] - obj_pos["z"])**2
+                    )
+                    min_distance = min(min_distance, distance)
+                    
+            return min_distance if min_distance != float('inf') else 2.0  # Default distance if no targets found
+            
+        except Exception as e:
+            print(f"Warning: Error calculating target distance: {e}")
+            return 2.0
     
     def _compute_step_reward(self, action_list, metrics, rst, prev_pos, curr_pos):
         """Compute comprehensive step reward with multiple components."""
@@ -727,11 +1034,11 @@ class SpocEnv(BaseEnv):
         return reward, reward_breakdown
     
     def _get_arm_state(self) -> str:
-        """Get the current arm state from real environment metadata."""
+        """Get the current arm state with full SPOC-compatible proprioception."""
         try:
-            arm_meta = self.env.last_event.metadata['arm']
-            arm_pos = arm_meta['position']
-            held_objects = arm_meta['heldObjects']
+            # Get full arm proprioception like SPOC
+            arm_proprioception = self._get_arm_proprioception()
+            held_objects = self.env.last_event.metadata['arm']['heldObjects']
             
             if held_objects:
                 object_name = held_objects[0]['objectType'].split('_')[0].lower()
@@ -739,11 +1046,42 @@ class SpocEnv(BaseEnv):
             else:
                 gripper_state = "empty"
                 
-            # Returns a simplified state for the prompt
-            return f"Arm is at (y={arm_pos['y']:.2f}, z={arm_pos['z']:.2f}), gripper is {gripper_state}."
+            # Return full state information like SPOC
+            return (f"Arm at (x={arm_proprioception[0]:.2f}, y={arm_proprioception[1]:.2f}, "
+                   f"z={arm_proprioception[2]:.2f}, wrist={arm_proprioception[3]:.1f}°), "
+                   f"gripper is {gripper_state}.")
         
         except (KeyError, IndexError):
             return "Arm state is unavailable."
+    
+    def _get_arm_proprioception(self):
+        """
+        Get full arm proprioception like SPOC's get_arm_proprioception method.
+        Returns [x, y, z, wrist_rotation] in robot coordinate frame.
+        """
+        try:
+            arm_metadata = self.env.last_event.metadata['arm']
+            joints = arm_metadata['joints']
+            
+            # Get wrist position (like SPOC's get_arm_wrist_position)
+            wrist_joint = joints[-1]  # Last joint is the wrist
+            assert wrist_joint["name"] == "stretch_robot_wrist_2_jnt"
+            
+            x = wrist_joint["rootRelativePosition"]["x"]
+            y = wrist_joint["rootRelativePosition"]["y"]
+            z = wrist_joint["rootRelativePosition"]["z"]
+            
+            # Get wrist rotation (like SPOC's get_arm_wrist_rotation)
+            wrist_rotation = math.fmod(
+                wrist_joint["rootRelativeRotation"]["w"] * wrist_joint["rootRelativeRotation"]["y"], 
+                360
+            )
+            
+            return [x, y, z, wrist_rotation]
+            
+        except (KeyError, IndexError, AssertionError):
+            # Fallback to basic arm state
+            return [0.0, 0.8, 0.0, 0.0]
 
     def _analyze_real_visual_scene(self, pil_image):
         """
@@ -831,8 +1169,329 @@ class SpocEnv(BaseEnv):
         
         return frame
 
+    def get_top_down_map(self, include_path=True, path_width=0.045):
+        """
+        Generate a SPOC-compatible top-down map with proper camera management.
+        Based on SPOC's get_top_down_path_view method.
+        
+        Args:
+            include_path: Whether to include the agent's path visualization
+            path_width: Width of the path visualization
+            
+        Returns:
+            numpy array: Top-down map image
+        """
+        try:
+            # Store original resolution like SPOC
+            original_hw = self.env.last_event.frame.shape[:2]
+            map_height_width = (getattr(self.config, 'map_size', 512), getattr(self.config, 'map_size', 512))
+            
+            # Change resolution for map generation if needed
+            if original_hw != map_height_width:
+                self.env.step(
+                    action="ChangeResolution", 
+                    x=map_height_width[1], 
+                    y=map_height_width[0], 
+                    raise_for_failure=True
+                )
+            
+            # Setup third-party camera like SPOC
+            if len(self.env.last_event.third_party_camera_frames) < 2:
+                event = self.env.step(action="GetMapViewCameraProperties", raise_for_failure=True)
+                if event.metadata['lastActionSuccess']:
+                    cam = event.metadata["actionReturn"].copy()
+                    cam["orthographicSize"] += 1  # SPOC adds 1 to orthographic size
+                    
+                    self.env.step(
+                        action="AddThirdPartyCamera",
+                        skyboxColor="white",
+                        **cam,
+                        raise_for_failure=True
+                    )
+            
+            # Create waypoints for target objects (SPOC-style)
+            waypoints = []
+            if self.episode_data and self.episode_data.get("targetObjectType"):
+                target_type = self.episode_data["targetObjectType"]
+                objects = self.env.last_event.metadata.get("objects", [])
+                
+                for obj in objects:
+                    if self._is_object_type_match(obj["objectType"], target_type):
+                        target_dict = {
+                            "position": obj["position"],
+                            "color": {"r": 1, "g": 0, "b": 0, "a": 1},  # Red for targets
+                            "radius": 0.5,
+                            "text": "",
+                        }
+                        waypoints.append(target_dict)
+            
+            # Add waypoints if any targets found
+            if waypoints:
+                self.env.step(
+                    action="VisualizeWaypoints",
+                    waypoints=waypoints,
+                    raise_for_failure=True
+                )
+            
+            # Add path visualization (SPOC-style)
+            if include_path and hasattr(self, 'agent_path') and len(self.agent_path) > 0:
+                self.env.step(
+                    action="VisualizePath",
+                    positions=self.agent_path,
+                    pathWidth=path_width,
+                    raise_for_failure=True
+                )
+                # Hide path immediately after capturing (like SPOC)
+                self.env.step(action="HideVisualizedPath")
+            
+            # Get the map from third party camera
+            if len(self.env.last_event.third_party_camera_frames) > 0:
+                map_frame = self.env.last_event.third_party_camera_frames[-1]
+                
+                # Apply SPOC's cutoff (remove black borders)
+                cutoff = round(map_frame.shape[1] * 6 / 396)
+                if cutoff > 0:
+                    map_frame = map_frame[:, cutoff:-cutoff, :]
+                
+                # Ensure RGB format
+                if len(map_frame.shape) == 3 and map_frame.shape[2] == 4:
+                    map_frame = map_frame[:, :, :3]  # Drop alpha channel
+            else:
+                # Fallback to main camera with cutoff
+                map_frame = self.env.last_event.frame
+                cutoff = round(map_frame.shape[1] * 6 / 396)
+                if cutoff > 0:
+                    map_frame = map_frame[:, cutoff:-cutoff, :]
+            
+            # Restore original resolution like SPOC
+            if original_hw != map_height_width:
+                self.env.step(
+                    action="ChangeResolution", 
+                    x=original_hw[1], 
+                    y=original_hw[0], 
+                    raise_for_failure=True
+                )
+            
+            return map_frame
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to generate SPOC-compatible map: {e}")
+            # Return a placeholder gray image
+            return np.full((512, 512, 3), 128, dtype=np.uint8)
+    
+    def generate_spoc_map(self, agent_path=None, target_objects=None, map_size=(512, 512)):
+        """Generate SPOC-style map with path and target visualization (ported from test_spoc_map_final.py)."""
+        try:
+            if agent_path is None:
+                agent_path = self.agent_path
+            
+            # Setup third party camera if needed
+            if len(self.env.last_event.third_party_camera_frames) < 2:
+                event = self.env.step(action="GetMapViewCameraProperties")
+                if event.metadata.get('lastActionSuccess', False):
+                    cam = event.metadata["actionReturn"].copy()
+                    # Increase orthographic size for better view
+                    if "orthographicSize" in cam:
+                        cam["orthographicSize"] += 1
+                    
+                    self.env.step(
+                        action="AddThirdPartyCamera",
+                        **cam,
+                        skyboxColor="white"
+                    )
+            
+            # Get the current map frame
+            event = self.env.last_event
+            if len(event.third_party_camera_frames) > 0:
+                map_frame = event.third_party_camera_frames[-1].copy()
+                
+                # Apply cutoff like SPOC does
+                cutoff = round(map_frame.shape[1] * 6 / 396)
+                map_frame = map_frame[:, cutoff:-cutoff, :]
+                
+                # Convert RGBA to RGB if needed
+                if map_frame.shape[2] == 4:
+                    map_frame = map_frame[:, :, :3]
+                
+                # Convert to PIL for drawing
+                from PIL import Image, ImageDraw
+                map_pil = Image.fromarray(map_frame.astype(np.uint8))
+                draw = ImageDraw.Draw(map_pil)
+                
+                # Simple coordinate conversion (this is approximate)
+                def world_to_map(pos):
+                    # This is a simplified conversion - may need adjustment
+                    x_range = 10  # Approximate world size
+                    z_range = 10
+                    
+                    map_x = int((pos['x'] + x_range/2) / x_range * map_pil.width)
+                    map_y = int((pos['z'] + z_range/2) / z_range * map_pil.height)
+                    
+                    return map_x, map_y
+                
+                # Draw agent path
+                if len(agent_path) > 1:
+                    path_points = [world_to_map(pos) for pos in agent_path]
+                    for i in range(len(path_points) - 1):
+                        draw.line([path_points[i], path_points[i+1]], fill=(0, 0, 255), width=3)
+                
+                # Draw target objects
+                if target_objects:
+                    for obj_type in target_objects:
+                        for obj in self.env.last_event.metadata.get('objects', []):
+                            if obj_type.lower() in obj.get('objectType', '').lower():
+                                obj_x, obj_y = world_to_map(obj['position'])
+                                # Draw red circle for target
+                                draw.ellipse(
+                                    [(obj_x-10, obj_y-10), (obj_x+10, obj_y+10)], 
+                                    fill=(255, 0, 0), 
+                                    outline=(200, 0, 0)
+                                )
+                                break
+                
+                # Draw current agent position
+                if agent_path:
+                    agent_x, agent_y = world_to_map(agent_path[-1])
+                    draw.ellipse(
+                        [(agent_x-5, agent_y-5), (agent_x+5, agent_y+5)], 
+                        fill=(0, 255, 0), 
+                        outline=(0, 200, 0)
+                    )
+                    
+                return np.array(map_pil)
+            else:
+                return np.full((224, 396, 3), 128, dtype=np.uint8)
+                
+        except Exception as e:
+            print(f"Map generation error: {e}")
+            import traceback
+            traceback.print_exc()
+            return np.full((224, 396, 3), 128, dtype=np.uint8)
+    
+    def get_multi_room_map(self, orthographic_scale=3.0, include_current_position=True):
+        """
+        Generate a larger-scale top-down map showing multiple rooms.
+        
+        Args:
+            orthographic_scale: Multiplier for orthographic size (larger = more rooms visible)
+            include_current_position: Whether to mark current agent position
+            
+        Returns:
+            numpy array: Multi-room top-down map image
+        """
+        try:
+            # Store original resolution
+            original_hw = self.env.last_event.frame.shape[:2]
+            map_size = getattr(self.config, 'map_size', 800)  # Larger default for multi-room
+            
+            # Change resolution for map generation
+            self.env.step(action="ChangeResolution", x=map_size, y=map_size)
+            
+            # Force refresh and get current position
+            current_agent_pos = self.env.last_event.metadata["agent"]["position"]
+            
+            # Get map view camera properties and modify for larger view
+            event = self.env.step(action="GetMapViewCameraProperties")
+            if event.metadata['lastActionSuccess']:
+                cam = event.metadata["actionReturn"].copy()
+                # Significantly increase orthographic size for multi-room view
+                original_size = cam.get("orthographicSize", 10)
+                cam["orthographicSize"] = original_size * orthographic_scale
+                
+                # Position camera higher for better overview
+                if 'position' in cam:
+                    cam['position']['y'] += 3  # Higher camera for multi-room view
+                
+                # Add third party camera for top-down view
+                self.env.step(
+                    action="AddThirdPartyCamera",
+                    skyboxColor="white",
+                    **cam
+                )
+            else:
+                # Fallback: manually create camera with large view
+                bounds = self.env.last_event.metadata.get("sceneBounds", {})
+                if bounds:
+                    center = bounds.get("center", {"x": 0, "y": 0, "z": 0})
+                    size = bounds.get("size", {"x": 20, "y": 10, "z": 20})
+                    
+                    # Use much larger orthographic size for multi-room
+                    ortho_size = max(size["x"], size["z"]) * orthographic_scale
+                    cam_height = center["y"] + ortho_size * 0.8
+                    
+                    cam = {
+                        "position": {"x": center["x"], "y": cam_height, "z": center["z"]},
+                        "rotation": {"x": 90, "y": 0, "z": 0},
+                        "orthographic": True,
+                        "orthographicSize": ortho_size,
+                        "fieldOfView": 90,
+                        "nearClippingPlane": 0.01,
+                        "farClippingPlane": 100,
+                        "skyboxColor": "white"
+                    }
+                    
+                    self.env.step(action="AddThirdPartyCamera", **cam)
+            
+            # Add current agent position as red waypoint
+            if include_current_position:
+                agent_waypoint = [{
+                    "position": current_agent_pos,
+                    "color": {"r": 1, "g": 0, "b": 0, "a": 1},  # Red for current position
+                    "radius": 0.4,
+                    "text": ""
+                }]
+                self.env.step(action="VisualizeWaypoints", waypoints=agent_waypoint)
+            
+            # Add target object highlights if available
+            if self.episode_data and self.episode_data.get("targetObjectType"):
+                target_type = self.episode_data["targetObjectType"]
+                objects = self.env.last_event.metadata.get("objects", [])
+                target_waypoints = []
+                
+                for obj in objects:
+                    if obj["objectType"].lower().startswith(target_type.lower()):
+                        target_waypoints.append({
+                            "position": obj["position"],
+                            "color": {"r": 0, "g": 0, "b": 1, "a": 1},  # Blue for targets
+                            "radius": 0.3,
+                            "text": ""
+                        })
+                
+                if target_waypoints:
+                    self.env.step(action="VisualizeWaypoints", waypoints=target_waypoints)
+            
+            # Visualize agent path if available
+            if hasattr(self, 'agent_path') and len(self.agent_path) > 1:
+                self.env.step(
+                    action="VisualizePath",
+                    positions=self.agent_path,
+                    pathWidth=0.08,  # Thicker path for visibility
+                    pathColor={"r": 1, "g": 0.5, "b": 0, "a": 1}  # Orange path
+                )
+            
+            # Get the map from third party camera
+            if len(self.env.last_event.third_party_camera_frames) > 0:
+                map_frame = self.env.last_event.third_party_camera_frames[-1]
+                # Convert RGBA to RGB if needed
+                if len(map_frame.shape) == 3 and map_frame.shape[2] == 4:
+                    map_frame = map_frame[:, :, :3]
+            else:
+                map_frame = self.env.last_event.frame
+            
+            # Clean up visualizations
+            self.env.step(action="HideVisualizedPath")
+            
+            # Restore original resolution
+            self.env.step(action="ChangeResolution", x=original_hw[1], y=original_hw[0])
+            
+            return map_frame
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to generate multi-room map: {e}")
+            return np.full((800, 800, 3), 128, dtype=np.uint8)
+    
     def _render(self, init_obs=True):
-        """Render the environment observation using real AI2-THOR images."""
+        """Render the environment observation with 3 separate images: navigation camera, manipulation camera, and top-down map."""
         img_placeholder = getattr(self.config, "image_placeholder", "<image>")
         
         format_prompt_text = self.format_prompt_func(
@@ -841,45 +1500,84 @@ class SpocEnv(BaseEnv):
             add_example=False
         )
         
-        # Get the real image from AI2-THOR with better error handling
+        # Get 3 separate images: navigation camera, manipulation camera, and map
         try:
             import numpy as np
+            
             # Force a step to ensure we have a fresh event
             if not self.env.last_event or self.env.last_event.frame is None:
                 print("[DEBUG] Refreshing AI2-THOR event...")
                 self.env.step(action="Pass")  # Do nothing action to refresh
             
-            if self.env and self.env.last_event and self.env.last_event.frame is not None:
-                # Use the real frame from AI2-THOR
-                frame = self.env.last_event.frame
-                print(f"[SUCCESS] Got real AI2-THOR frame: shape={frame.shape}, mean={np.mean(frame):.1f}")
-                
-                # Convert numpy array to PIL Image
-                pil_image = convert_numpy_to_PIL(frame)
-                
-                # Generate visual description from the real image
-                visual_description = self._analyze_real_visual_scene(pil_image)
-                
-            else:
-                # Fallback: Check if frame is None
-                print(f"[WARNING] AI2-THOR frame unavailable, using fallback")
-                raise ValueError("CloudRendering frame unavailable")
-                
-        except Exception as e:
-            print(f"[FALLBACK] Real rendering failed: {e}, using synthetic frames")
+            images = []
             
-            # Fallback to synthetic frames if real rendering fails
+            # 1. Get navigation camera
+            nav_frame = self.navigation_camera
+            if nav_frame is not None:
+                nav_image = convert_numpy_to_PIL(nav_frame)
+                images.append(nav_image)
+                print(f"[SUCCESS] Got navigation camera: shape={nav_frame.shape}")
+            else:
+                print("[FALLBACK] Navigation camera unavailable, using synthetic")
+                nav_frame_synthetic = self._generate_synthetic_frame("navigation")
+                nav_image = convert_numpy_to_PIL(nav_frame_synthetic)
+                images.append(nav_image)
+            
+            # 2. Get manipulation camera
+            manip_frame = self.manipulation_camera
+            if manip_frame is not None:
+                manip_image = convert_numpy_to_PIL(manip_frame)
+                images.append(manip_image)
+                print(f"[SUCCESS] Got manipulation camera: shape={manip_frame.shape}")
+            else:
+                print("[FALLBACK] Manipulation camera unavailable, using synthetic")
+                manip_frame_synthetic = self._generate_synthetic_frame("manipulation")
+                manip_image = convert_numpy_to_PIL(manip_frame_synthetic)
+                images.append(manip_image)
+            
+            # 3. Generate top-down map
+            try:
+                target_objects = [self.episode_data.get('targetObjectType', '')] if self.episode_data else []
+                map_frame = self.generate_spoc_map(
+                    agent_path=self.agent_path,
+                    target_objects=target_objects,
+                    map_size=(512, 512)
+                )
+                map_image = convert_numpy_to_PIL(map_frame)
+                images.append(map_image)
+                print(f"[SUCCESS] Generated top-down map: shape={map_frame.shape}")
+            except Exception as map_error:
+                print(f"[FALLBACK] Map generation failed: {map_error}, using placeholder")
+                placeholder_map = np.full((512, 512, 3), 128, dtype=np.uint8)
+                map_image = convert_numpy_to_PIL(placeholder_map)
+                images.append(map_image)
+            
+            # Generate visual description from the navigation camera (primary view)
+            visual_description = self._analyze_real_visual_scene(images[0])
+            
+        except Exception as e:
+            print(f"[CRITICAL FALLBACK] All rendering failed: {e}, using 3 synthetic images")
+            
+            # Complete fallback to synthetic images
             import numpy as np
             nav_frame = self._generate_synthetic_frame("navigation") 
             manip_frame = self._generate_synthetic_frame("manipulation")
-            concatenated_frame = np.concatenate([nav_frame, manip_frame], axis=1)
-            pil_image = convert_numpy_to_PIL(concatenated_frame)
-            visual_description = self._analyze_visual_scene(pil_image)
+            map_frame = np.full((512, 512, 3), 128, dtype=np.uint8)
+            
+            images = [
+                convert_numpy_to_PIL(nav_frame),
+                convert_numpy_to_PIL(manip_frame),
+                convert_numpy_to_PIL(map_frame)
+            ]
+            visual_description = self._analyze_visual_scene(images[0])
         
-        # For VLM, provide the image as a list (required by serialization)
+        # For VLM, provide 3 separate images as a list
         multi_modal_data = {
-            img_placeholder: [pil_image]
+            img_placeholder: images  # List of 3 PIL images: [nav_cam, manip_cam, map]
         }
+        
+        print(f"[RENDER SUCCESS] Provided {len(images)} images to VLM: nav_cam, manip_cam, map")
+        # Note: Map is now always included as the 3rd image, no optional config needed
         
         # Get current arm state
         arm_state = self._get_arm_state()

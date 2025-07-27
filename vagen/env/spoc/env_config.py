@@ -23,6 +23,12 @@ class SpocEnvConfig(BaseEnvConfig):
     success_threshold: float = 1.0  # Distance threshold for navigation-based success
     multiview: bool = False
     
+    # === Top-Down Map Configuration ===
+    include_top_down_map: bool = False  # Whether to include top-down map in observations
+    map_size: int = 256  # Size of the top-down map (map_size x map_size)
+    include_agent_path: bool = False  # Whether to visualize agent's path on the map
+    path_width: float = 0.045  # Width of the path visualization
+    
     # === Prompt and Action Configuration ===
     prompt_format: str = "grounding_worldmodeling"
     max_actions_per_step: int = 3  # Increased from 1 to allow multi-step coordination

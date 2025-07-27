@@ -7,6 +7,7 @@
 **/*.tar.gz
 **/playground
 **/wandb
+spoc-robot-training/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

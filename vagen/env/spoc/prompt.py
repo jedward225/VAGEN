@@ -48,21 +48,21 @@ def system_prompt(**kwargs):
     if selected_format in ["free_think", "default"]:
         example=f"""Example:
 Round 1:
-Visual Observation: [Dual camera view]
+Visual Observation: [Navigation camera, Manipulation camera, Top-down map]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think>The navigation view shows I'm in a kitchen with the target coffee mug on the counter ahead. The manipulation view shows the counter edge but mug is not in range yet. My arm is retracted. I need to navigate closer to get the mug within manipulation range.</think>
+<think>Navigation camera shows I'm in a kitchen with the target coffee mug on the counter ahead. Manipulation camera shows the counter edge but mug is not in range yet. The top-down map shows the target as a red circle on the counter ahead, and my current position as a green circle. My arm is retracted. I need to navigate closer to get the mug within manipulation range.</think>
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Visual Observation: [Dual camera view]
+Visual Observation: [Navigation camera, Manipulation camera, Top-down map] 
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
-<think>Good, I'm now closer to the counter. The navigation view shows the mug is directly ahead. The manipulation view shows the mug is now visible and within reach. I need to extend my arm out to reach the mug position.</think>
+<think>Good, I'm now closer to the counter. Navigation camera shows the mug is directly ahead. Manipulation camera shows the mug is now visible and within reach. The top-down map shows I've moved closer to the red target circle. I need to extend my arm out to reach the mug position.</think>
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Visual Observation: [Dual camera view]
+Visual Observation: [Navigation camera, Manipulation camera, Top-down map]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
-<think>Perfect! My arm is extended and I've successfully grasped the mug. The navigation view shows I'm holding the target object. Manipulation camera confirms the mug is securely in my gripper. Task completed successfully.</think>
+<think>Perfect! My arm is extended and I've successfully grasped the mug. Navigation camera shows I'm holding the target object. Manipulation camera confirms the mug is securely in my gripper. The top-down map shows my path leading to the target. Task completed successfully.</think>
 <answer>Done - mug retrieved</answer>
 Round 4:
 Env_feedback: Success"""
@@ -150,17 +150,17 @@ Arm State: z=0.1m, y=0.9m, wrist=0°, gripper=empty
     elif selected_format == "no_think":
         example=f"""Example:
 Round 1:
-Visual Observation: [Dual camera view]
+Visual Observation: [Navigation camera, Manipulation camera, Top-down map]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <answer>moveahead, moveahead</answer>
 Round 2:
 Env_feedback: Last action is executed successfully.
-Visual Observation: [Dual camera view]
+Visual Observation: [Navigation camera, Manipulation camera, Top-down map]
 Arm State: z=0.0m, y=0.8m, wrist=0°, gripper=empty
 <answer>move_arm_out, move_arm_out, pickup</answer>
 Round 3:
 Env_feedback: Last action is executed successfully.
-Visual Observation: [Dual camera view]
+Visual Observation: [Navigation camera, Manipulation camera, Top-down map]
 Arm State: z=0.2m, y=0.8m, wrist=0°, gripper=holding_mug
 <answer>Task completed</answer>
 Round 4:
@@ -169,9 +169,10 @@ Env_feedback: Success"""
     base_prompt_text = """You are a Stretch robot performing object manipulation tasks in home environments.
 
 VISUAL OBSERVATION:
-You receive a single visual observation that combines two camera views side-by-side:
-- Left side: Navigation Camera - wide-field view for spatial awareness and navigation
-- Right side: Manipulation Camera - close-up view of objects within manipulation range
+You receive 3 separate visual inputs for comprehensive spatial awareness:
+1. Navigation Camera: Wide-field view for spatial awareness and navigation
+2. Manipulation Camera: Close-up view of objects within manipulation range  
+3. Top-down Map: Bird's-eye view showing room layout, your path (blue), targets (red), current position (green)
 
 ARM PROPRIOCEPTION:
 Your arm state is always provided with these parameters:
@@ -206,27 +207,36 @@ Manipulation Actions:
 - move_arm_out_small: Extend the arm outward by 0.02 meters (fine adjustment)
 - move_arm_in_small: Retract the arm inward by 0.02 meters (fine adjustment)
 
+MAP INTERPRETATION:
+- Blue lines: Your movement path and trajectory
+- Red circles: Target objects you need to fetch
+- Green circle: Your current position
+- Room layout: Walls, furniture, and navigable space clearly visible
+- Use the map for spatial planning and efficient navigation strategies
+
 COORDINATION STRATEGY:
-1. Use the navigation view (left side) to locate target objects and plan approach
-2. Use base movement actions to position yourself optimally
-3. Use the manipulation view (right side) to precisely guide arm movements
-4. Monitor arm proprioception to ensure accurate positioning
-5. Coordinate both views to maintain spatial awareness during manipulation
+1. Use the navigation camera to locate target objects and plan approach
+2. Use the top-down map to understand room layout and plan efficient paths
+3. Use base movement actions to position yourself optimally
+4. Use the manipulation camera to precisely guide arm movements
+5. Monitor arm proprioception to ensure accurate positioning
+6. Coordinate all three visual inputs to maintain spatial awareness during manipulation
 
 MANIPULATION WORKFLOW:
-1. Navigate to target using navigation view (left side) and base movements
-2. Position yourself so target appears in manipulation view (right side)
-3. Extend arm outward (move_arm_out) to reach target
-4. Adjust arm height (move_arm_up/down) if needed
-5. Fine-tune positioning with small movements if necessary
-6. Execute pickup when object is within gripper range
-7. Use dropoff when you need to release the object
+1. Check the top-down map to locate targets (red circles) and plan your route
+2. Navigate to target using navigation camera and base movements
+3. Position yourself so target appears in manipulation camera view
+4. Extend arm outward (move_arm_out) to reach target
+5. Adjust arm height (move_arm_up/down) if needed
+6. Fine-tune positioning with small movements if necessary
+7. Execute pickup when object is within gripper range
+8. Use dropoff when you need to release the object
 
 Rewards:
 - Format correct: +0.5
 - Successful object manipulation: +10.0
 
-The instruction will be provided with each observation. Use both cameras and arm proprioception to complete manipulation tasks efficiently."""
+The instruction will be provided with each observation. Use all three visual inputs (navigation camera, manipulation camera, top-down map) and arm proprioception to complete manipulation tasks efficiently."""
     return base_prompt_text + '\n' + example
 
 # init_observation_template and action_template for SPOC robot manipulation
