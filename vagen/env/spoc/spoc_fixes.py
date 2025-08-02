@@ -148,7 +148,7 @@ def get_spoc_initialize_params() -> Dict:
     These should be passed to the Initialize action, not the Controller constructor.
     """
     return {
-        "visibilityDistance": 0.8673349051766235,  # MAXIMUM_DISTANCE_ARM_FROM_AGENT_CENTER
+        # "visibilityDistance": 0.8673349051766235,  # MAXIMUM_DISTANCE_ARM_FROM_AGENT_CENTER - commented out for CloudRendering compatibility
     }
 
 

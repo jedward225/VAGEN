@@ -251,8 +251,8 @@ class ChoresDataset:
                 initial_pose_data = episode_group["last_agent_location"][0]
                 agent_pose = {
                     "position": {"x": initial_pose_data[0], "y": initial_pose_data[1], "z": initial_pose_data[2]},
-                    "rotation": initial_pose_data[3],
-                    "horizon": initial_pose_data[4],
+                    "rotation": initial_pose_data[4],  # Column 4 contains the actual rotation (yaw) in degrees
+                    "horizon": 0,  # Keep horizon at 0 (looking straight ahead, not up at ceiling)
                 }
                 
                 # 5. Extract target object info

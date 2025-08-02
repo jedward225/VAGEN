@@ -286,13 +286,19 @@ class SpocEnv(BaseEnv):
                 # Step 1.5: Apply SPOC initialization parameters (especially visibilityDistance)
                 init_params = get_spoc_initialize_params()
                 print(f"[SPOC] Applying initialize parameters: {init_params}")
-                init_event = self.env.step(action="Initialize", **init_params)
-                if not init_event.metadata.get('lastActionSuccess'):
-                    print(f"[SPOC] Warning: Initialize action failed: {init_event.metadata.get('errorMessage', 'Unknown error')}")
-                    # Don't raise error - this is not critical
+                if init_params:  # Only call Initialize if there are parameters
+                    print(f"[DEBUG] Calling Initialize with params: {init_params}")
+                    init_event = self.env.step(action="Initialize", **init_params)
+                    print(f"[DEBUG] Initialize completed")
+                    if not init_event.metadata.get('lastActionSuccess'):
+                        print(f"[SPOC] Warning: Initialize action failed: {init_event.metadata.get('errorMessage', 'Unknown error')}")
+                        # Don't raise error - this is not critical
+                else:
+                    print(f"[DEBUG] Skipping Initialize action (no parameters)")
                 
                 # Step 2: Teleport the agent to the starting pose
                 pose = traj_data["agentPose"]
+                print(f"[DEBUG] About to teleport agent to position: {pose['position']}, rotation: {pose['rotation']}")
                 self._last_event = self.env.step(
                     action="TeleportFull",
                     position=pose["position"],
@@ -301,11 +307,14 @@ class SpocEnv(BaseEnv):
                     standing=True,
                     forceAction=True
                 )
+                print(f"[DEBUG] Teleport completed, success: {self._last_event.metadata.get('lastActionSuccess') if self._last_event else 'No event'}")
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to teleport agent in scene {scene_name}.")
                 
                 # Step 2.5: Calibrate agent like SPOC (cameras, gripper, etc.)
+                print(f"[DEBUG] About to calibrate agent...")
                 self._calibrate_agent()
+                print(f"[DEBUG] Agent calibration completed")
 
                 # Step 3: Enable lighting in the scene
                 try:
