@@ -124,7 +124,7 @@ def get_spoc_compatible_thor_config() -> Dict:
         "gridSize": 0.15,  # AGENT_MOVEMENT_CONSTANT * 0.75
         "width": 396,      # INTEL_CAMERA_WIDTH
         "height": 224,     # INTEL_CAMERA_HEIGHT  
-        "visibilityDistance": 0.8673349051766235,  # MAXIMUM_DISTANCE_ARM_FROM_AGENT_CENTER
+        # visibilityDistance moved to Initialize action - not Controller constructor
         "visibilityScheme": "Distance",
         "fieldOfView": 59,  # INTEL_VERTICAL_FOV
         "useMassThreshold": True,
@@ -140,6 +140,15 @@ def get_spoc_compatible_thor_config() -> Dict:
         "server_timeout": 1000,
         "snapToGrid": False,
         "fastActionEmit": True,
+    }
+
+def get_spoc_initialize_params() -> Dict:
+    """
+    Returns parameters for the Initialize action in AI2-THOR.
+    These should be passed to the Initialize action, not the Controller constructor.
+    """
+    return {
+        "visibilityDistance": 0.8673349051766235,  # MAXIMUM_DISTANCE_ARM_FROM_AGENT_CENTER
     }
 
 

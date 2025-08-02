@@ -17,6 +17,7 @@ from .task_loader import get_dataset
 from vagen.env.utils.state_reward_text_utils import env_state_reward_wrapper
 from .spoc_fixes import (
     get_spoc_compatible_thor_config,
+    get_spoc_initialize_params,
     is_object_type_match_spoc,
     validate_scene_name,
     get_wrist_rotation_delta,
@@ -281,6 +282,14 @@ class SpocEnv(BaseEnv):
                 self._last_event = self.env.reset(scene=scene_name)
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to reset to scene {scene_name}.")
+                
+                # Step 1.5: Apply SPOC initialization parameters (especially visibilityDistance)
+                init_params = get_spoc_initialize_params()
+                print(f"[SPOC] Applying initialize parameters: {init_params}")
+                init_event = self.env.step(action="Initialize", **init_params)
+                if not init_event.metadata.get('lastActionSuccess'):
+                    print(f"[SPOC] Warning: Initialize action failed: {init_event.metadata.get('errorMessage', 'Unknown error')}")
+                    # Don't raise error - this is not critical
                 
                 # Step 2: Teleport the agent to the starting pose
                 pose = traj_data["agentPose"]
