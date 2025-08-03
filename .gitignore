@@ -129,3 +129,7 @@ temp/
 benchmark_results/
 env_benchmark_results/
 results/
+
+configs/
+run_gpt4o_mini_test.sh
+test_gpt4o_mini_spoc.py

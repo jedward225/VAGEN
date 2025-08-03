@@ -185,6 +185,10 @@ class SpocEnv(BaseEnv):
         self.exploration_positions = set()
         self.last_pickup_attempt_step = -10  # Track pickup attempts
         
+        # Action success tracking
+        self._last_action_success = True
+        self._last_action_failure_reason = ""
+        
         self.format_prompt_func = format_prompt[self.config.prompt_format]
         self.parse_func = PARSE_FUNC_MAP[self.config.prompt_format]
     
@@ -265,21 +269,38 @@ class SpocEnv(BaseEnv):
             print(f"[DEBUG EPISODE] Using fallback instruction: {self.episode_language_instruction}")
 
         # Reset the AI2-THOR scene with validation
-        scene_name = traj_data["scene"]
+        scene_data = traj_data["scene"]
+        house_index = traj_data.get("house_index", "unknown")
         
-        # Validate scene name and correct if needed
-        is_valid, corrected_scene = validate_scene_name(scene_name)
-        if not is_valid:
-            print(f"[SPOC] Warning: Scene {scene_name} not valid, using {corrected_scene}")
-            scene_name = corrected_scene
+        # Check if we have ProcTHOR scene JSON or AI2-THOR scene name
+        if isinstance(scene_data, dict):
+            # ProcTHOR scene JSON format
+            print(f"[SPOC] Using ProcTHOR scene for house_index {house_index}")
+            scene_json = scene_data
+            scene_name = f"ProcTHOR_House_{house_index}"
+        else:
+            # Legacy AI2-THOR FloorPlan format (fallback)
+            print(f"[SPOC] Warning: Using legacy AI2-THOR FloorPlan format: {scene_data}")
+            scene_name = scene_data
+            # Validate scene name and correct if needed
+            is_valid, corrected_scene = validate_scene_name(scene_name)
+            if not is_valid:
+                print(f"[SPOC] Warning: Scene {scene_name} not valid, using {corrected_scene}")
+                scene_name = corrected_scene
+            scene_json = None
             
         max_retries = 3
         reset_success = False
         for attempt in range(max_retries):
             try:
-                # Step 1: Reset the AI2-THOR scene using standard iTHOR reset
-                print(f"[DEBUG] Attempting to reset to AI2-THOR scene: {scene_name}")
-                self._last_event = self.env.reset(scene=scene_name)
+                if scene_json is not None:
+                    # Step 1: Reset with ProcTHOR scene JSON (like official SPOC)
+                    print(f"[DEBUG] Attempting to reset to ProcTHOR scene: {scene_name}")
+                    self._last_event = self.env.reset(scene=scene_json)
+                else:
+                    # Step 1: Reset the AI2-THOR scene using standard iTHOR reset (fallback)
+                    print(f"[DEBUG] Attempting to reset to AI2-THOR scene: {scene_name}")
+                    self._last_event = self.env.reset(scene=scene_name)
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to reset to scene {scene_name}.")
                 
@@ -297,16 +318,33 @@ class SpocEnv(BaseEnv):
                     print(f"[DEBUG] Skipping Initialize action (no parameters)")
                 
                 # Step 2: Teleport the agent to the starting pose
-                pose = traj_data["agentPose"]
-                print(f"[DEBUG] About to teleport agent to position: {pose['position']}, rotation: {pose['rotation']}")
-                self._last_event = self.env.step(
-                    action="TeleportFull",
-                    position=pose["position"],
-                    rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
-                    horizon=0,  # Use HORIZON=0 as in SPOC
-                    standing=True,
-                    forceAction=True
-                )
+                if scene_json is not None:
+                    # For ProcTHOR scenes, the agent position from dataset should be used
+                    # But we need to be careful - the scene might have its own agent position
+                    pose = traj_data["agentPose"]
+                    print(f"[DEBUG] About to teleport agent in ProcTHOR scene to position: {pose['position']}, rotation: {pose['rotation']}")
+                    
+                    # Use the dataset pose (from the original trajectory)
+                    self._last_event = self.env.step(
+                        action="TeleportFull",
+                        position=pose["position"],
+                        rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
+                        horizon=0,  # Use HORIZON=0 as in SPOC
+                        standing=True,
+                        forceAction=True
+                    )
+                else:
+                    # For AI2-THOR FloorPlan scenes (fallback)
+                    pose = traj_data["agentPose"]
+                    print(f"[DEBUG] About to teleport agent in AI2-THOR scene to position: {pose['position']}, rotation: {pose['rotation']}")
+                    self._last_event = self.env.step(
+                        action="TeleportFull",
+                        position=pose["position"],
+                        rotation={'x': 0, 'y': pose["rotation"], 'z': 0},
+                        horizon=0,  # Use HORIZON=0 as in SPOC
+                        standing=True,
+                        forceAction=True
+                    )
                 print(f"[DEBUG] Teleport completed, success: {self._last_event.metadata.get('lastActionSuccess') if self._last_event else 'No event'}")
                 if not self._last_event or not self._last_event.metadata.get('lastActionSuccess'):
                     raise RuntimeError(f"Attempt {attempt + 1}: Failed to teleport agent in scene {scene_name}.")
@@ -514,8 +552,17 @@ class SpocEnv(BaseEnv):
         info['env_step'] = self._current_step
         info['episode_elapsed_seconds'] = time.time() - self._episode_start_time
         info['task_success'] = success
-        info['last_action_success'] = self.env.last_event.metadata['lastActionSuccess']
-        info["env_feedback"] ="Last action is executed successfully." if info['last_action_success'] else "Last action is not executed successfully."
+        info['last_action_success'] = self._last_action_success
+        
+        # Generate detailed feedback based on action success
+        if len(action_list) > 0:
+            action_name = action_list[0].lower()
+            if self._last_action_success:
+                info["env_feedback"] = f"Action '{action_name}' executed successfully."
+            else:
+                info["env_feedback"] = f"Action '{action_name}' FAILED - {self._last_action_failure_reason}. Try a different approach."
+        else:
+            info["env_feedback"] = "No valid action was provided. Please specify a valid action."
         self.info = info
         # Update total reward
         self.total_reward += self.reward
@@ -524,6 +571,14 @@ class SpocEnv(BaseEnv):
     
     def _execute_action(self, action_index: int):
         """Executes a discrete action for the Stretch robot using SPOC-compatible actions."""
+        # Store state before action for validation
+        before_state = {
+            "position": self.env.last_event.metadata["agent"]["position"].copy(),
+            "rotation": self.env.last_event.metadata["agent"]["rotation"].copy(),
+            "arm_state": self._get_current_arm_state().copy(),
+            "holding": self.is_holding
+        }
+        
         # Get current arm state for calculating absolute positions
         current_arm_state = self._get_current_arm_state()
         
@@ -623,6 +678,60 @@ class SpocEnv(BaseEnv):
         # Add physics step for dropoff action like SPOC
         if params["action"] == "ReleaseObject":
             self.env.step(action="AdvancePhysicsStep", simSeconds=2)
+        
+        # Validate action success by checking if state actually changed
+        after_state = {
+            "position": self.env.last_event.metadata["agent"]["position"].copy(),
+            "rotation": self.env.last_event.metadata["agent"]["rotation"].copy(),
+            "arm_state": self._get_current_arm_state().copy(),
+            "holding": self.is_holding
+        }
+        
+        # Check action success based on action type (following SPOC's logic)
+        action_success = True
+        action_failure_reason = ""
+        
+        if action_index in [1, 2]:  # Movement actions
+            position_change = math.sqrt(
+                (after_state["position"]["x"] - before_state["position"]["x"])**2 +
+                (after_state["position"]["z"] - before_state["position"]["z"])**2
+            )
+            if position_change < 0.01:  # SPOC's threshold
+                action_success = False
+                action_failure_reason = "collision - cannot move in that direction"
+                
+        elif action_index in [3, 4, 5, 6]:  # Rotation actions
+            rotation_change = abs(after_state["rotation"]["y"] - before_state["rotation"]["y"])
+            # Handle wrap-around
+            if rotation_change > 180:
+                rotation_change = 360 - rotation_change
+            if rotation_change < 2:  # SPOC's threshold
+                action_success = False
+                action_failure_reason = "collision - cannot rotate"
+                
+        elif action_index in range(11, 21) and action_index not in [15, 16]:  # Arm movements
+            arm_change = math.sqrt(
+                (after_state["arm_state"]["x"] - before_state["arm_state"]["x"])**2 +
+                (after_state["arm_state"]["y"] - before_state["arm_state"]["y"])**2 +
+                (after_state["arm_state"]["z"] - before_state["arm_state"]["z"])**2
+            )
+            if arm_change < 0.001:  # SPOC's threshold
+                action_success = False
+                action_failure_reason = "arm at limit or collision"
+                
+        elif action_index == 9:  # Pickup
+            if not self.is_holding and before_state["holding"] == self.is_holding:
+                action_success = False
+                action_failure_reason = "no object within reach to pick up"
+                
+        elif action_index == 10:  # Dropoff
+            if self.is_holding and before_state["holding"] == self.is_holding:
+                action_success = False
+                action_failure_reason = "failed to release object"
+        
+        # Store action success info for feedback
+        self._last_action_success = action_success
+        self._last_action_failure_reason = action_failure_reason
 
     def _get_current_arm_state(self):
         """Get current arm state for absolute positioning like SPOC."""
@@ -895,6 +1004,14 @@ class SpocEnv(BaseEnv):
         else:
             reward_breakdown['effectiveness'] = 0.0
             
+        # 4.5. Failed action penalty - encourage trying different approaches
+        if not self._last_action_success:
+            failed_action_penalty = -0.5  # Significant penalty for failed actions
+            reward += failed_action_penalty
+            reward_breakdown['action_failure'] = failed_action_penalty
+        else:
+            reward_breakdown['action_failure'] = 0.0
+            
         # 5. Object manipulation rewards
         current_holding = self.is_holding
         if current_holding and not self.prev_holding:
@@ -1122,6 +1239,12 @@ class SpocEnv(BaseEnv):
                 brightness_desc = "moderately lit"
             
             # Enhanced description with target information
+            description = f"The robot observes a {brightness_desc} indoor household environment"
+            
+            # Add warning if last action failed
+            if hasattr(self, '_last_action_success') and not self._last_action_success:
+                description += " [WARNING: Last action failed due to collision or physical constraints]"
+            
             if self.episode_data and self.episode_data.get("targetObjectType"):
                 target_type = self.episode_data["targetObjectType"]
                 # Get visible objects from AI2-THOR
@@ -1134,11 +1257,13 @@ class SpocEnv(BaseEnv):
                         break
                 
                 if target_visible:
-                    return f"The robot observes a {brightness_desc} indoor household environment. TARGET FOUND: A {target_type} is visible in the scene! The robot should approach and pick it up."
+                    description += f". TARGET FOUND: A {target_type} is visible in the scene! The robot should approach and pick it up."
                 else:
-                    return f"The robot observes a {brightness_desc} indoor household environment. The robot is searching for a {target_type}. Continue exploring to find the target object."
+                    description += f". The robot is searching for a {target_type}. Continue exploring to find the target object."
             else:
-                return f"The robot observes a {brightness_desc} indoor household environment with various objects and furniture."
+                description += " with various objects and furniture."
+                
+            return description
                 
         except Exception as e:
             print(f"Warning: Error analyzing real visual scene: {e}")
@@ -1297,11 +1422,51 @@ class SpocEnv(BaseEnv):
             # Return a placeholder gray image
             return np.full((512, 512, 3), 128, dtype=np.uint8)
     
+    def _pad_to_square(self, image_array):
+        """
+        Pad an image array to square dimensions by adding white pixels.
+        
+        Args:
+            image_array: numpy array of shape (H, W, 3)
+            
+        Returns:
+            Square numpy array with white padding
+        """
+        height, width = image_array.shape[:2]
+        
+        if height == width:
+            return image_array  # Already square
+        
+        # Determine the size of the square (larger dimension)
+        square_size = max(height, width)
+        
+        # Create white square canvas
+        if len(image_array.shape) == 3:
+            padded_image = np.full((square_size, square_size, image_array.shape[2]), 255, dtype=image_array.dtype)
+        else:
+            padded_image = np.full((square_size, square_size), 255, dtype=image_array.dtype)
+        
+        # Calculate padding offsets to center the original image
+        y_offset = (square_size - height) // 2
+        x_offset = (square_size - width) // 2
+        
+        # Place the original image in the center
+        padded_image[y_offset:y_offset + height, x_offset:x_offset + width] = image_array
+        
+        print(f"[MAP PADDING] Original: {height}×{width} → Padded: {square_size}×{square_size}")
+        
+        return padded_image
+    
     def generate_spoc_map(self, agent_path=None, target_objects=None, map_size=(512, 512)):
         """Generate SPOC-style map with path and target visualization (ported from test_spoc_map_final.py)."""
         try:
             if agent_path is None:
                 agent_path = self.agent_path
+            
+            print(f"[MAP DEBUG] Agent path has {len(agent_path)} points")
+            if len(agent_path) > 0:
+                print(f"[MAP DEBUG] First point: {agent_path[0]}")
+                print(f"[MAP DEBUG] Last point: {agent_path[-1]}")
             
             # Setup third party camera if needed
             if len(self.env.last_event.third_party_camera_frames) < 2:
@@ -1332,26 +1497,82 @@ class SpocEnv(BaseEnv):
                     map_frame = map_frame[:, :, :3]
                 
                 # Convert to PIL for drawing
-                from PIL import Image, ImageDraw
+                try:
+                    from PIL import Image, ImageDraw
+                except ImportError:
+                    print("Warning: PIL not available for map drawing")
+                    return map_frame
                 map_pil = Image.fromarray(map_frame.astype(np.uint8))
                 draw = ImageDraw.Draw(map_pil)
                 
-                # Simple coordinate conversion (this is approximate)
+                # Better coordinate conversion based on scene bounds
                 def world_to_map(pos):
-                    # This is a simplified conversion - may need adjustment
-                    x_range = 10  # Approximate world size
-                    z_range = 10
-                    
-                    map_x = int((pos['x'] + x_range/2) / x_range * map_pil.width)
-                    map_y = int((pos['z'] + z_range/2) / z_range * map_pil.height)
-                    
-                    return map_x, map_y
+                    try:
+                        # Get scene bounds for proper scaling
+                        scene_bounds = self.env.last_event.metadata.get('sceneBounds')
+                        if scene_bounds:
+                            center = scene_bounds['center']
+                            size = scene_bounds['size']
+                            
+                            # Convert world coordinates to map coordinates
+                            rel_x = (pos['x'] - center['x']) / size['x'] * 0.8 + 0.5  # 0.8 for margin
+                            rel_z = (pos['z'] - center['z']) / size['z'] * 0.8 + 0.5  # 0.8 for margin
+                            
+                            map_x = int(rel_x * map_pil.width)
+                            map_y = int(rel_z * map_pil.height)
+                        else:
+                            # Fallback to automatic detection from agent path
+                            if len(agent_path) > 1:
+                                xs = [p['x'] for p in agent_path]
+                                zs = [p['z'] for p in agent_path]
+                                x_min, x_max = min(xs), max(xs)
+                                z_min, z_max = min(zs), max(zs)
+                                
+                                # Add some margin
+                                x_range = max(x_max - x_min, 5) * 1.2
+                                z_range = max(z_max - z_min, 5) * 1.2
+                                x_center = (x_min + x_max) / 2
+                                z_center = (z_min + z_max) / 2
+                            else:
+                                # Very basic fallback
+                                x_range = z_range = 10
+                                x_center = z_center = 0
+                            
+                            map_x = int((pos['x'] - x_center + x_range/2) / x_range * map_pil.width)
+                            map_y = int((pos['z'] - z_center + z_range/2) / z_range * map_pil.height)
+                        
+                        # Clamp to map bounds
+                        map_x = max(0, min(map_pil.width - 1, map_x))
+                        map_y = max(0, min(map_pil.height - 1, map_y))
+                        
+                        return map_x, map_y
+                    except Exception as e:
+                        print(f"Warning: Error in coordinate conversion: {e}")
+                        return map_pil.width // 2, map_pil.height // 2
                 
-                # Draw agent path
+                # Draw agent path with gradient colors
                 if len(agent_path) > 1:
                     path_points = [world_to_map(pos) for pos in agent_path]
+                    print(f"[MAP DEBUG] Drawing path with {len(path_points)} points")
+                    
+                    # Draw path segments with gradient from blue (start) to red (current)
                     for i in range(len(path_points) - 1):
-                        draw.line([path_points[i], path_points[i+1]], fill=(0, 0, 255), width=3)
+                        # Calculate color gradient based on position in path
+                        progress = i / max(len(path_points) - 1, 1)
+                        
+                        # Gradient from blue (start) to red (current)
+                        red = int(progress * 255)
+                        blue = int((1 - progress) * 255)
+                        green = 0
+                        
+                        # Draw thicker line for better visibility
+                        draw.line([path_points[i], path_points[i+1]], 
+                                fill=(red, green, blue), width=4)
+                        
+                        # Draw small circles at each waypoint
+                        x, y = path_points[i]
+                        draw.ellipse([(x-2, y-2), (x+2, y+2)], 
+                                   fill=(red, green, blue), outline=(255, 255, 255))
                 
                 # Draw target objects
                 if target_objects:
@@ -1367,14 +1588,21 @@ class SpocEnv(BaseEnv):
                                 )
                                 break
                 
-                # Draw current agent position
+                # Draw current agent position with a distinctive marker
                 if agent_path:
                     agent_x, agent_y = world_to_map(agent_path[-1])
+                    # Draw larger bright green circle for current position
                     draw.ellipse(
-                        [(agent_x-5, agent_y-5), (agent_x+5, agent_y+5)], 
+                        [(agent_x-8, agent_y-8), (agent_x+8, agent_y+8)], 
                         fill=(0, 255, 0), 
-                        outline=(0, 200, 0)
+                        outline=(255, 255, 255), width=2
                     )
+                    # Draw smaller inner circle for contrast
+                    draw.ellipse(
+                        [(agent_x-3, agent_y-3), (agent_x+3, agent_y+3)], 
+                        fill=(255, 255, 255)
+                    )
+                    print(f"[MAP DEBUG] Agent position: ({agent_x}, {agent_y}) from world ({agent_path[-1]['x']:.1f}, {agent_path[-1]['z']:.1f})")
                     
                 return np.array(map_pil)
             else:
@@ -1553,20 +1781,25 @@ class SpocEnv(BaseEnv):
                 manip_image = convert_numpy_to_PIL(manip_frame_synthetic)
                 images.append(manip_image)
             
-            # 3. Generate top-down map
+            # 3. Generate top-down map in natural scene dimensions
             try:
                 target_objects = [self.episode_data.get('targetObjectType', '')] if self.episode_data else []
+                # Generate map in natural dimensions (let AI2-THOR decide the aspect ratio)
                 map_frame = self.generate_spoc_map(
                     agent_path=self.agent_path,
                     target_objects=target_objects,
-                    map_size=(512, 512)
+                    map_size=None  # Let it use natural scene dimensions
                 )
+                
+                # Agent receives the original natural dimensions
                 map_image = convert_numpy_to_PIL(map_frame)
                 images.append(map_image)
-                print(f"[SUCCESS] Generated top-down map: shape={map_frame.shape}")
+                print(f"[SUCCESS] Generated top-down map: natural dimensions={map_frame.shape}")
             except Exception as map_error:
                 print(f"[FALLBACK] Map generation failed: {map_error}, using placeholder")
-                placeholder_map = np.full((512, 512, 3), 128, dtype=np.uint8)
+                # Use camera dimensions for fallback
+                nav_h, nav_w = nav_frame.shape[:2] if nav_frame is not None else (224, 384)
+                placeholder_map = np.full((nav_h, nav_w, 3), 128, dtype=np.uint8)
                 map_image = convert_numpy_to_PIL(placeholder_map)
                 images.append(map_image)
             

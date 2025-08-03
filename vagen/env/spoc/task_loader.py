@@ -1,13 +1,11 @@
-"""
-Task loader for SPOC environment with ChoresDataset.
-This module handles loading episode data from the SPOC ChoresDataset format.
-"""
+# Task loader for SPOC environment with ChoresDataset.
 import os
 import json
 import h5py
 import glob
 import numpy as np
 from typing import Dict, Any, List
+from .procthor_house_loader import load_procthor_house
 
 # Helper function adapted from official SPOC codebase
 def json_templated_to_NL_spec(json_spec: Dict[str, Any]) -> Dict[str, Any]:
@@ -163,7 +161,6 @@ class ChoresDataset:
             try:
                 with h5py.File(hdf5_path, 'r') as f:
                     for episode_key in f.keys():
-                        # We will check the task_type inside __getitem__ after loading
                         self.episodes.append({
                             "hdf5_path": hdf5_path,
                             "episode_key": episode_key,
@@ -211,10 +208,23 @@ class ChoresDataset:
                     # Returning a dummy that will likely fail, to avoid a hard crash
                     house_index = 0 
                 
-                # 2. Construct the correct scene name string from the index
-                # Map SPOC's large house_index to ai2thor v5.0.0's supported FloorPlan1-430 range
-                mapped_scene_index = self._map_house_index_to_scene(house_index)
-                scene_name = f"FloorPlan{mapped_scene_index}"
+                # 2. Load the actual ProcTHOR house JSON using house_index
+                # Instead of mapping to FloorPlan, load the original ProcTHOR scene
+                house_json = load_procthor_house(house_index, split=self.split)
+                if house_json is None:
+                    print(f"[ERROR] Could not load ProcTHOR house for house_index {house_index}")
+                    print(f"[FALLBACK] Using dummy scene data - this will likely cause positioning issues")
+                    # Create a minimal scene as fallback
+                    house_json = {
+                        "metadata": {
+                            "agent": {
+                                "position": {"x": 0.0, "y": 0.9, "z": 0.0},
+                                "rotation": {"x": 0, "y": 0, "z": 0},
+                                "horizon": 0
+                            }
+                        }
+                    }
+                scene_name = house_json  # Pass the full house JSON instead of a string
 
                 # 3. Load and process the task spec JSON to get the instruction
                 task_spec_bytes = episode_group["templated_task_spec"][:].tobytes()
@@ -258,10 +268,11 @@ class ChoresDataset:
                 # 5. Extract target object info
                 target_object_type = processed_task_spec.get("objectName", None)
 
-                # 6. Assemble the final, CORRECT data dictionary
+                # 6. Assemble the final, CORRECT data dictionary with ProcTHOR scene
                 return {
                     "instruction": processed_task_spec['instruction'],
-                    "scene": scene_name,  # <-- Use the correctly constructed scene_name
+                    "scene": scene_name,  # <-- Now contains the full ProcTHOR house JSON
+                    "house_index": house_index,  # Keep original house_index for reference
                     "agentPose": agent_pose,
                     "targetObjectType": target_object_type,
                 }
