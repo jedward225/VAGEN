@@ -208,29 +208,28 @@ Manipulation Actions:
 - move_arm_in_small: Retract the arm inward by 0.02 meters (fine adjustment)
 
 MAP INTERPRETATION:
-- Blue lines: Your movement path and trajectory
-- Red circles: Target objects you need to fetch
-- Green circle: Your current position
-- Room layout: Walls, furniture, and navigable space clearly visible
-- Use the map for spatial planning and efficient navigation strategies
+- Room layout: Walls, furniture, and navigable space
+- Spatial relationships: Relative positions of rooms and objects
+- Navigation planning: Use to understand the environment structure
 
 COORDINATION STRATEGY:
 1. Use the navigation camera to locate target objects and plan approach
-2. Use the top-down map to understand room layout and plan efficient paths
+2. Use the top-down map to understand room layout and spatial relationships
 3. Use base movement actions to position yourself optimally
 4. Use the manipulation camera to precisely guide arm movements
 5. Monitor arm proprioception to ensure accurate positioning
 6. Coordinate all three visual inputs to maintain spatial awareness during manipulation
 
 MANIPULATION WORKFLOW:
-1. Check the top-down map to locate targets (red circles) and plan your route
-2. Navigate to target using navigation camera and base movements
-3. Position yourself so target appears in manipulation camera view
-4. Extend arm outward (move_arm_out) to reach target
-5. Adjust arm height (move_arm_up/down) if needed
-6. Fine-tune positioning with small movements if necessary
-7. Execute pickup when object is within gripper range
-8. Use dropoff when you need to release the object
+1. Use the navigation camera to scan for target objects in the current view
+2. Use the top-down map to understand room structure and plan navigation
+3. Navigate to target using base movements while monitoring both cameras
+4. Position yourself so target appears in manipulation camera view
+5. Extend arm outward (move_arm_out) to reach target
+6. Adjust arm height (move_arm_up/down) if needed
+7. Fine-tune positioning with small movements if necessary
+8. Execute pickup when object is within gripper range
+9. Use dropoff when you need to release the object
 
 Rewards:
 - Format correct: +0.5

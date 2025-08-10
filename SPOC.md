@@ -230,30 +230,46 @@ def get_shortest_path_to_room(self, room_id):
 
 ## Task Types
 
-### 1. ObjectNav
-- **Goal**: Navigate to a specific object type
-- **Success**: Target object visible and centered
-- **Sensors**: Object bounding boxes, visibility counts
+SPOC provides both navigation and manipulation tasks through different task types:
 
-### 2. Pickup
-- **Goal**: Pick up a specific object
-- **Success**: Object held in gripper
-- **Additional Requirements**: Object must be reachable by arm
+### Navigation Tasks
 
-### 3. Fetch
-- **Goal**: Navigate to and pick up an object
-- **Success**: Combines ObjectNav and Pickup success
-- **Two-stage**: Navigation phase then manipulation phase
+#### 1. ObjectNavType
+- **Goal**: Navigate to locate a specific object type
+- **Instruction Format**: "go to the [object]" 
+- **Success Criteria**: Target object visible within 2m and properly aligned
+- **Action Focus**: Navigation actions only (moveahead, rotateright, etc.)
+- **No Manipulation**: Do not attempt pickup or arm movements
 
-### 4. RoomNav
+#### 4. RoomNavType  
 - **Goal**: Navigate to a specific room type
-- **Success**: Agent located in target room
+- **Instruction Format**: "go to the [room]"
+- **Success Criteria**: Agent located in target room
 - **Uses**: Room polygon maps for localization
 
-### 5. RoomVisit
-- **Goal**: Visit N rooms
-- **Success**: Agent has entered N unique rooms
+#### 5. RoomVisitType
+- **Goal**: Visit multiple rooms in sequence
+- **Success Criteria**: Agent has entered required number of unique rooms
 - **Tracking**: Maintains visited room history
+
+### Manipulation Tasks
+
+#### 2. PickupType
+- **Goal**: Pick up a specific object (assumes object is nearby)
+- **Instruction Format**: Object pickup task
+- **Success Criteria**: Object held in gripper
+- **Action Focus**: Arm movements and pickup actions
+- **Requirements**: Object must be reachable by arm
+
+### Combined Navigation + Manipulation Tasks
+
+#### 3. FetchType
+- **Goal**: Navigate to and pick up an object
+- **Instruction Format**: "go to the [location] and get me a [object]"
+- **Success Criteria**: Combines ObjectNav and Pickup success
+- **Two-stage Process**: 
+  1. Navigation phase: Locate and approach target
+  2. Manipulation phase: Position arm and pick up object
 
 ## Action Space
 
@@ -409,6 +425,38 @@ def visualize_realtime_map(controller, occupancy_map, agent_path):
    - Enable multi-agent map sharing
 
 This architecture provides a solid foundation for incorporating real-time mapping capabilities while maintaining the system's current strengths in navigation and manipulation tasks.
+
+## Data Loading and Environment Compatibility Issues
+
+### Scene Compatibility Problem
+
+The SPOC dataset contains agent trajectories recorded in **ProcTHOR-Objaverse scenes**, but many implementations attempt to replay them in **AI2-THOR FloorPlan scenes**, causing fundamental compatibility issues:
+
+#### Root Cause
+1. **SPOC Dataset Collection**: Agent trajectories recorded in ProcTHOR-Objaverse procedurally generated scenes
+2. **Implementation Mismatch**: Agent positions applied to AI2-THOR FloorPlan scenes (e.g., FloorPlan229)
+3. **Result**: Agent spawns outside scene boundaries because coordinates valid in original ProcTHOR scene are invalid in mapped FloorPlan
+
+#### Environment Differences
+| Aspect | AI2-THOR FloorPlan | ProcTHOR-Objaverse |
+|--------|-------------------|---------------------|
+| **Scenes** | 120 fixed scenes | Thousands of generated scenes |
+| **Objects** | ~100 object types | 40,000+ Objaverse objects |
+| **Layouts** | Hand-crafted | Procedurally generated |
+| **Realism** | Simplified | Photo-realistic |
+| **Navigation** | Predictable paths | Complex, varied layouts |
+| **Object Placement** | Fixed positions | Dynamic arrangements |
+
+#### Solution Approaches
+1. **Recommended**: Use original ProcTHOR-Objaverse scenes for data integrity
+2. **Alternative**: Implement position validation and correction for AI2-THOR scenes
+3. **Critical**: Ensure scene type matches dataset expectations for proper agent positioning
+
+### Data Loading Pipeline Considerations
+- **Scene Caching**: Cache loaded ProcTHOR scenes to avoid repeated loading
+- **Trajectory Validation**: Pre-validate all trajectories for scene compatibility
+- **Memory Management**: Implement efficient scene loading/unloading
+- **Error Handling**: Robust handling of scene mismatches and invalid positions
 
 
 

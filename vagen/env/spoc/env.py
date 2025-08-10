@@ -1473,6 +1473,7 @@ class SpocEnv(BaseEnv):
                 event = self.env.step(action="GetMapViewCameraProperties")
                 if event.metadata.get('lastActionSuccess', False):
                     cam = event.metadata["actionReturn"].copy()
+                    print(f"[MAP CAMERA DEBUG] Camera properties: {cam}")
                     # Increase orthographic size for better view
                     if "orthographicSize" in cam:
                         cam["orthographicSize"] += 1
@@ -1482,6 +1483,46 @@ class SpocEnv(BaseEnv):
                         **cam,
                         skyboxColor="white"
                     )
+                    print(f"[MAP CAMERA DEBUG] Camera setup completed with ortho size: {cam.get('orthographicSize', 'unknown')}")
+            
+            # TEST: Try official SPOC waypoint method in ProcTHOR
+            print(f"[MAP DEBUG] Testing if ProcTHOR supports waypoint visualization...")
+            
+            # Try to create waypoints like official SPOC does
+            waypoints = []
+            if target_objects:
+                for obj_type in target_objects:
+                    for obj in self.env.last_event.metadata.get('objects', []):
+                        if obj_type.lower() in obj.get('objectType', '').lower():
+                            target_dict = {
+                                "position": obj['position'],
+                                "color": {"r": 1, "g": 0, "b": 0, "a": 1},
+                                "radius": 0.5,
+                                "text": "",
+                            }
+                            waypoints.append(target_dict)
+                            print(f"[MAP DEBUG] Created target waypoint at {obj['position']}")
+                            break
+            
+            # Try official SPOC waypoint visualization
+            if waypoints:
+                try:
+                    print(f"[MAP DEBUG] Attempting VisualizeWaypoints with {len(waypoints)} waypoints...")
+                    event = self.env.step(action="VisualizeWaypoints", waypoints=waypoints)
+                    print(f"[MAP DEBUG] VisualizeWaypoints success: {event.metadata.get('lastActionSuccess', False)}")
+                except Exception as e:
+                    print(f"[MAP DEBUG] VisualizeWaypoints failed: {e}")
+            
+            # Try official SPOC path visualization
+            if agent_path and len(agent_path) > 1:
+                try:
+                    print(f"[MAP DEBUG] Attempting VisualizePath with {len(agent_path)} positions...")
+                    event = self.env.step(action="VisualizePath", positions=agent_path)
+                    print(f"[MAP DEBUG] VisualizePath success: {event.metadata.get('lastActionSuccess', False)}")
+                    # Cleanup like official SPOC does
+                    self.env.step(action="HideVisualizedPath")
+                except Exception as e:
+                    print(f"[MAP DEBUG] VisualizePath failed: {e}")
             
             # Get the current map frame
             event = self.env.last_event
@@ -1489,122 +1530,17 @@ class SpocEnv(BaseEnv):
                 map_frame = event.third_party_camera_frames[-1].copy()
                 
                 # Apply cutoff like SPOC does
-                cutoff = round(map_frame.shape[1] * 6 / 396)
-                map_frame = map_frame[:, cutoff:-cutoff, :]
+                # COMMENTED OUT FOR TESTING - use full map
+                # cutoff = round(map_frame.shape[1] * 6 / 396)
+                # map_frame = map_frame[:, cutoff:-cutoff, :]
                 
                 # Convert RGBA to RGB if needed
                 if map_frame.shape[2] == 4:
                     map_frame = map_frame[:, :, :3]
                 
-                # Convert to PIL for drawing
-                try:
-                    from PIL import Image, ImageDraw
-                except ImportError:
-                    print("Warning: PIL not available for map drawing")
-                    return map_frame
-                map_pil = Image.fromarray(map_frame.astype(np.uint8))
-                draw = ImageDraw.Draw(map_pil)
-                
-                # Better coordinate conversion based on scene bounds
-                def world_to_map(pos):
-                    try:
-                        # Get scene bounds for proper scaling
-                        scene_bounds = self.env.last_event.metadata.get('sceneBounds')
-                        if scene_bounds:
-                            center = scene_bounds['center']
-                            size = scene_bounds['size']
-                            
-                            # Convert world coordinates to map coordinates
-                            rel_x = (pos['x'] - center['x']) / size['x'] * 0.8 + 0.5  # 0.8 for margin
-                            rel_z = (pos['z'] - center['z']) / size['z'] * 0.8 + 0.5  # 0.8 for margin
-                            
-                            map_x = int(rel_x * map_pil.width)
-                            map_y = int(rel_z * map_pil.height)
-                        else:
-                            # Fallback to automatic detection from agent path
-                            if len(agent_path) > 1:
-                                xs = [p['x'] for p in agent_path]
-                                zs = [p['z'] for p in agent_path]
-                                x_min, x_max = min(xs), max(xs)
-                                z_min, z_max = min(zs), max(zs)
-                                
-                                # Add some margin
-                                x_range = max(x_max - x_min, 5) * 1.2
-                                z_range = max(z_max - z_min, 5) * 1.2
-                                x_center = (x_min + x_max) / 2
-                                z_center = (z_min + z_max) / 2
-                            else:
-                                # Very basic fallback
-                                x_range = z_range = 10
-                                x_center = z_center = 0
-                            
-                            map_x = int((pos['x'] - x_center + x_range/2) / x_range * map_pil.width)
-                            map_y = int((pos['z'] - z_center + z_range/2) / z_range * map_pil.height)
-                        
-                        # Clamp to map bounds
-                        map_x = max(0, min(map_pil.width - 1, map_x))
-                        map_y = max(0, min(map_pil.height - 1, map_y))
-                        
-                        return map_x, map_y
-                    except Exception as e:
-                        print(f"Warning: Error in coordinate conversion: {e}")
-                        return map_pil.width // 2, map_pil.height // 2
-                
-                # Draw agent path with gradient colors
-                if len(agent_path) > 1:
-                    path_points = [world_to_map(pos) for pos in agent_path]
-                    print(f"[MAP DEBUG] Drawing path with {len(path_points)} points")
-                    
-                    # Draw path segments with gradient from blue (start) to red (current)
-                    for i in range(len(path_points) - 1):
-                        # Calculate color gradient based on position in path
-                        progress = i / max(len(path_points) - 1, 1)
-                        
-                        # Gradient from blue (start) to red (current)
-                        red = int(progress * 255)
-                        blue = int((1 - progress) * 255)
-                        green = 0
-                        
-                        # Draw thicker line for better visibility
-                        draw.line([path_points[i], path_points[i+1]], 
-                                fill=(red, green, blue), width=4)
-                        
-                        # Draw small circles at each waypoint
-                        x, y = path_points[i]
-                        draw.ellipse([(x-2, y-2), (x+2, y+2)], 
-                                   fill=(red, green, blue), outline=(255, 255, 255))
-                
-                # Draw target objects
-                if target_objects:
-                    for obj_type in target_objects:
-                        for obj in self.env.last_event.metadata.get('objects', []):
-                            if obj_type.lower() in obj.get('objectType', '').lower():
-                                obj_x, obj_y = world_to_map(obj['position'])
-                                # Draw red circle for target
-                                draw.ellipse(
-                                    [(obj_x-10, obj_y-10), (obj_x+10, obj_y+10)], 
-                                    fill=(255, 0, 0), 
-                                    outline=(200, 0, 0)
-                                )
-                                break
-                
-                # Draw current agent position with a distinctive marker
-                if agent_path:
-                    agent_x, agent_y = world_to_map(agent_path[-1])
-                    # Draw larger bright green circle for current position
-                    draw.ellipse(
-                        [(agent_x-8, agent_y-8), (agent_x+8, agent_y+8)], 
-                        fill=(0, 255, 0), 
-                        outline=(255, 255, 255), width=2
-                    )
-                    # Draw smaller inner circle for contrast
-                    draw.ellipse(
-                        [(agent_x-3, agent_y-3), (agent_x+3, agent_y+3)], 
-                        fill=(255, 255, 255)
-                    )
-                    print(f"[MAP DEBUG] Agent position: ({agent_x}, {agent_y}) from world ({agent_path[-1]['x']:.1f}, {agent_path[-1]['z']:.1f})")
-                    
-                return np.array(map_pil)
+                # Return the map as-is - SPOC's native visualization already handles everything correctly
+                print(f"[MAP DEBUG] Using SPOC native visualization - map size: {map_frame.shape}")
+                return map_frame
             else:
                 return np.full((224, 396, 3), 128, dtype=np.uint8)
                 
