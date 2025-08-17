@@ -132,4 +132,4 @@ results/
 
 configs/
 run_gpt4o_mini_test.sh
-test_gpt4o_mini_spoc.py
+gpt4o_mini_spoc.py

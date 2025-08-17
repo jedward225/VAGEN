@@ -1370,22 +1370,25 @@ class SpocEnv(BaseEnv):
             
             # Add waypoints if any targets found
             if waypoints:
-                self.env.step(
-                    action="VisualizeWaypoints",
-                    waypoints=waypoints,
-                    raise_for_failure=True
-                )
+                try:
+                    self.env.step(
+                        action="VisualizeWaypoints",
+                        waypoints=waypoints,
+                        raise_for_failure=True
+                    )
+                except (ValueError, Exception) as e:
+                    print(f"[MAP] VisualizeWaypoints not supported, skipping waypoints: {e}")
             
             # Add path visualization (SPOC-style)
             if include_path and hasattr(self, 'agent_path') and len(self.agent_path) > 0:
                 self.env.step(
                     action="VisualizePath",
                     positions=self.agent_path,
-                    pathWidth=path_width,
+                    pathWidth=0.15,  # Slightly thicker path for better visibility
                     raise_for_failure=True
                 )
-                # Hide path immediately after capturing (like SPOC)
-                self.env.step(action="HideVisualizedPath")
+                # Don't hide path immediately - keep it visible for map capture
+                # self.env.step(action="HideVisualizedPath")
             
             # Get the map from third party camera
             if len(self.env.last_event.third_party_camera_frames) > 0:
@@ -1510,17 +1513,22 @@ class SpocEnv(BaseEnv):
                     print(f"[MAP DEBUG] Attempting VisualizeWaypoints with {len(waypoints)} waypoints...")
                     event = self.env.step(action="VisualizeWaypoints", waypoints=waypoints)
                     print(f"[MAP DEBUG] VisualizeWaypoints success: {event.metadata.get('lastActionSuccess', False)}")
-                except Exception as e:
-                    print(f"[MAP DEBUG] VisualizeWaypoints failed: {e}")
+                except (ValueError, Exception) as e:
+                    print(f"[MAP DEBUG] VisualizeWaypoints not supported in this AI2-THOR version: {e}")
+                    # Continue without waypoints - path visualization still works
             
             # Try official SPOC path visualization
             if agent_path and len(agent_path) > 1:
                 try:
                     print(f"[MAP DEBUG] Attempting VisualizePath with {len(agent_path)} positions...")
-                    event = self.env.step(action="VisualizePath", positions=agent_path)
+                    event = self.env.step(
+                        action="VisualizePath", 
+                        positions=agent_path,
+                        pathWidth=0.15  # Slightly thicker path for better visibility
+                    )
                     print(f"[MAP DEBUG] VisualizePath success: {event.metadata.get('lastActionSuccess', False)}")
-                    # Cleanup like official SPOC does
-                    self.env.step(action="HideVisualizedPath")
+                    # Don't hide path immediately - keep it for map capture
+                    # self.env.step(action="HideVisualizedPath")
                 except Exception as e:
                     print(f"[MAP DEBUG] VisualizePath failed: {e}")
             
@@ -1622,7 +1630,10 @@ class SpocEnv(BaseEnv):
                     "radius": 0.4,
                     "text": ""
                 }]
-                self.env.step(action="VisualizeWaypoints", waypoints=agent_waypoint)
+                try:
+                    self.env.step(action="VisualizeWaypoints", waypoints=agent_waypoint)
+                except (ValueError, Exception) as e:
+                    print(f"[MULTI-MAP] VisualizeWaypoints not supported for agent position: {e}")
             
             # Add target object highlights if available
             if self.episode_data and self.episode_data.get("targetObjectType"):
@@ -1640,15 +1651,18 @@ class SpocEnv(BaseEnv):
                         })
                 
                 if target_waypoints:
-                    self.env.step(action="VisualizeWaypoints", waypoints=target_waypoints)
+                    try:
+                        self.env.step(action="VisualizeWaypoints", waypoints=target_waypoints)
+                    except (ValueError, Exception) as e:
+                        print(f"[MULTI-MAP] VisualizeWaypoints not supported for target objects: {e}")
             
             # Visualize agent path if available
             if hasattr(self, 'agent_path') and len(self.agent_path) > 1:
                 self.env.step(
                     action="VisualizePath",
                     positions=self.agent_path,
-                    pathWidth=0.08,  # Thicker path for visibility
-                    pathColor={"r": 1, "g": 0.5, "b": 0, "a": 1}  # Orange path
+                    pathWidth=0.15  # Slightly thicker path for better visibility
+                    # Note: pathColor not supported in this AI2-THOR version
                 )
             
             # Get the map from third party camera
@@ -1727,8 +1741,11 @@ class SpocEnv(BaseEnv):
                     map_size=None  # Let it use natural scene dimensions
                 )
                 
-                # Agent receives the original natural dimensions
+                # Convert to PIL first for processing
                 map_image = convert_numpy_to_PIL(map_frame)
+                
+                # Note: We'll pad the map AFTER visualization enhancement to avoid coordinate misalignment
+                # The padding will be done in the visualization phase to preserve coordinate accuracy
                 images.append(map_image)
                 print(f"[SUCCESS] Generated top-down map: natural dimensions={map_frame.shape}")
             except Exception as map_error:
