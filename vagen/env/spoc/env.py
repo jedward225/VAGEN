@@ -1831,24 +1831,12 @@ class SpocEnv(BaseEnv):
         # Provide a concise system prompt for the complex SPOC task
         spoc_system_prompt = (
             "You are a Stretch robot in a household environment. Your task is to find and fetch specific objects. "
-            "STRATEGY: 1) Explore by moving forward/rotating until you see the target object. 2) When target is visible, approach it. 3) Extend arm and pickup the object. "
-            "IMPORTANT: Keep responses concise. In <think> tags: observation (what you see), reasoning (what to do next), prediction (expected outcome). "
+            "STRATEGY: 1) Clarify your tasks and goals, use the map properly to explore the room, and navigate to the appropriate location. 2) Try to find the target, extend your arm and pickup the object. "
+            "IMPORTANT: Keep responses concise. In <think> tags: observation, reasoning and prediction. "
             "In <answer> tags: action name(s) only. "
-            "VALID ACTIONS ONLY: moveahead, moveback, rotateright, rotateleft, rotateright_small, rotateleft_small, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, wrist_open, wrist_close, move_arm_up_small, move_arm_down_small, move_arm_out_small, move_arm_in_small. "
-            "DO NOT use: moveleft, moveright, or any other actions not listed above."
+            "VALID ACTIONS: moveahead, moveback, rotateright, rotateleft, rotateright_small, rotateleft_small, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, wrist_open, wrist_close, move_arm_up_small, move_arm_down_small, move_arm_out_small, move_arm_in_small. "
+            "You cannot use any other actions not listed above."
         )
-        # spoc_system_prompt = (
-        #     "You are an AI agent controlling a Stretch robot. Your ONLY task is to output actions to complete goals."
-        #     "You MUST respond in the specified format. DO NOT generate any other text, conversation, or explanations."
-        #     "First, think step-by-step inside the <think> tag. Analyze the observation and plan your next move."
-        #     "Then, you MUST provide exactly one action from the list in the <answer> tag."
-        #     "\n\n**CRITICAL: Your response MUST strictly follow this format:**"
-        #     "\n<think>Your detailed reasoning here.</think><answer>action_name</answer>"
-        #     "\n\n**Example:**"
-        #     "\n<think>The object is to my left, so I need to rotate left to face it.</think><answer>rotateleft</answer>"
-        #     "\n\nNow, begin."
-        # )
-
         return spoc_system_prompt + '\n\n' + system_prompt(format=self.config.prompt_format) + '\n' + format_prompt_text
     
     def close(self):
