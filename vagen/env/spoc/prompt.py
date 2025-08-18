@@ -159,8 +159,6 @@ MANIPULATION WORKFLOW:
 8. Execute pickup when object is within gripper range
 9. Use dropoff when you need to release the object
 
-# Rewards section removed - not used in current testing
-
 The instruction will be provided with each observation. Use all three visual inputs (navigation camera, manipulation camera, top-down map) and arm proprioception to complete manipulation tasks efficiently."""
     return base_prompt_text + '\n' + example
 
@@ -176,24 +174,77 @@ Arm State: {arm_state}
 Human Instruction: {instruction}
 Decide your next action(s)."""
 
+def get_contextual_prompt(action, feedback, success, arm_state, observation, instruction):
+    """根据执行情况生成上下文感知的提示"""
+    
+    # 处理action可能是list的情况
+    if isinstance(action, list):
+        action_str = action[0] if action else ""
+    else:
+        action_str = str(action) if action else ""
+    
+    # 检测可能的困境情况
+    is_likely_stuck = (
+        not success and 
+        ("collision" in feedback.lower() or "fail" in feedback.lower()) and
+        ("rotate" in action_str.lower() or "move" in action_str.lower())
+    )
+    
+    # 基础信息
+    base_info = f"""
+Current observation: {observation}
+Arm State: {arm_state}
+Task: {instruction}"""
+    
+    # 根据动作类型和执行结果生成针对性提示
+    if "pickup" in action_str.lower():
+        if success:
+            guidance = "Object picked up successfully. Navigate to the destination or complete the task."
+        else:
+            guidance = "Pickup failed. Adjust your position, extend your arm, or check if object is reachable."
+    elif "move_arm" in action_str.lower() or "arm" in action_str.lower():
+        if success:
+            guidance = "Arm position adjusted. Check if target is now within reach for pickup."
+        else:
+            guidance = "Arm movement failed. Try alternative arm positioning or check for obstacles."
+    elif "move" in action_str.lower() or "rotate" in action_str.lower():
+        if success:
+            guidance = "After moving, check your new position and look for the target object."
+        else:
+            if is_likely_stuck:
+                guidance = "You appear to be stuck in a corner or tight space. Try 'moveback' to exit this area, then rotate to find an open path."
+            elif "rotate" in action_str.lower():
+                guidance = "Rotation failed or stuck in place. Try moving backward to exit tight spaces, then explore a different direction."
+            else:
+                guidance = "Movement failed. If in a corner or tight space, try moving backward first, then choose a clear direction."
+    elif "fail" in feedback.lower() or not success:
+        guidance = "Previous action failed. Consider an alternative approach to reach your goal."
+    else:
+        guidance = "Continue with your task. Select the next appropriate action."
+    
+    return f"""{guidance}
+{base_info}
+Decide your next action."""
+
 def action_template(**kwargs):
     observation = kwargs.get("observation", "No observation provided.")
     instruction = kwargs.get("instruction", "No instruction provided.")
     valid_action = kwargs.get("valid_action", "No valid action provided.")
     env_feedback = kwargs.get("env_feedback", "No environment feedback provided.")
-    # reward = kwargs.get("reward", "No reward provided.")  # Commented out - not used
-    done = kwargs.get("done", "No done status provided.")
     arm_state = kwargs.get("arm_state", "z=0.0m, y=0.8m, wrist=0°, gripper=empty")
     
-    return f"""After your answer, the extracted valid action is {valid_action}.
-The environment feedback is: {env_feedback}
-# reward: {reward}  # Commented out - not used
-done: {done}
-After that, the observation is:
-{observation}
-Arm State: {arm_state}
-Human Instruction: {instruction}
-Decide your next action(s)."""
+    # 判断执行是否成功
+    success = "success" in env_feedback.lower() or "executed successfully" in env_feedback.lower()
+    
+    # 使用上下文感知的提示生成
+    return get_contextual_prompt(
+        action=valid_action,
+        feedback=env_feedback, 
+        success=success,
+        arm_state=arm_state,
+        observation=observation,
+        instruction=instruction
+    )
 
 # format_prompt_generator function, similar to your first (FrozenLake) example
 def format_prompt_generator(format_type):
@@ -223,7 +274,7 @@ def format_prompt_generator(format_type):
         config = FORMAT_CONFIGS[format_type]
         
         base_prompt = f"""You can take up to {max_actions_per_step} action(s) at a time, separated by '{action_sep}'.
-IMPORTANT: Limit responses to 1-3 actions maximum. Avoid repeating actions.
+Limit responses to 1-3 actions maximum. 
 {config["description"]}"""
         
         if "additional_info" in config: # In case it's added to FORMAT_CONFIGS later
@@ -248,6 +299,32 @@ format_prompt = {
     for ft in FORMAT_CONFIGS  # Iterate directly over keys in FORMAT_CONFIGS
 }
 
+
+def get_action_explanations():
+    """返回详细的动作解释，参考embodied-reasoner风格"""
+    return """
+Available Actions:
+Navigation:
+- "moveahead": Move the robot base forward by 0.2 meters to approach objects or explore.
+- "moveback": Move the robot base backward by 0.2 meters to create distance or reposition.
+- "rotateright": Rotate the robot base right by 30° to change viewing direction or orientation.
+- "rotateleft": Rotate the robot base left by 30° to change viewing direction or orientation.
+- "rotateright_small": Rotate the robot base right by 6° for fine directional adjustments.
+- "rotateleft_small": Rotate the robot base left by 6° for fine directional adjustments.
+
+Manipulation:
+- "pickup": Initiate a grasp action to pick up an object currently in manipulation range.
+- "dropoff": Execute a release action to drop the currently held object.
+- "move_arm_up": Move the arm up by 0.1 meters to reach higher objects or avoid obstacles.
+- "move_arm_down": Move the arm down by 0.1 meters to reach lower objects or surfaces.
+- "move_arm_out": Extend the arm outward by 0.1 meters to reach distant objects.
+- "move_arm_in": Retract the arm inward by 0.1 meters to bring objects closer or reset position.
+- "wrist_open": Rotate the wrist counterclockwise by 10° to adjust gripper orientation.
+- "wrist_close": Rotate the wrist clockwise by 10° to adjust gripper orientation.
+- "move_arm_up_small": Move the arm up by 0.02 meters for precise height adjustments.
+- "move_arm_down_small": Move the arm down by 0.02 meters for precise height adjustments.
+- "move_arm_out_small": Extend the arm outward by 0.02 meters for precise reach adjustments.
+- "move_arm_in_small": Retract the arm inward by 0.02 meters for precise positioning."""
 
 if __name__ == "__main__":
     # Example usage

@@ -1821,23 +1821,21 @@ class SpocEnv(BaseEnv):
         Returns:
             System prompt string
         """
-        # 为了避免 prompt 过长，这里不在 system_prompt 中附加示例
-        format_prompt_text = self.format_prompt_func(
-            max_actions_per_step=self.config.max_actions_per_step,
-            action_sep=self.config.action_sep,
-            add_example=False # in order to shorten the system prompt
-        )
-        
-        # Provide a concise system prompt for the complex SPOC task
+        # 保留原有的简洁系统提示
         spoc_system_prompt = (
             "You are a Stretch robot in a household environment. Your task is to find and fetch specific objects. "
-            "STRATEGY: 1) Clarify your tasks and goals, use the map properly to explore the room, and navigate to the appropriate location. 2) Try to find the target, extend your arm and pickup the object. "
+            "1) Clarify your tasks and goals, use the map properly to explore the room, and navigate to the appropriate location. 2) Try to find the target, extend your arm and pickup the object. "
             "IMPORTANT: Keep responses concise. In <think> tags: observation, reasoning and prediction. "
             "In <answer> tags: action name(s) only. "
             "VALID ACTIONS: moveahead, moveback, rotateright, rotateleft, rotateright_small, rotateleft_small, pickup, dropoff, move_arm_up, move_arm_down, move_arm_out, move_arm_in, wrist_open, wrist_close, move_arm_up_small, move_arm_down_small, move_arm_out_small, move_arm_in_small. "
             "You cannot use any other actions not listed above."
         )
-        return spoc_system_prompt + '\n\n' + system_prompt(format=self.config.prompt_format) + '\n' + format_prompt_text
+        
+        # 只添加精简的动作解释，去除冗余的base_prompt和examples
+        from vagen.env.spoc.prompt import get_action_explanations
+        action_explanations = get_action_explanations()
+        
+        return spoc_system_prompt + '\n' + action_explanations
     
     def close(self):
         """Close the environment."""
